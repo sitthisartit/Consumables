@@ -35,7 +35,7 @@
     <div id="root"></div>
 
     <script type="module">
-        import React, { useState, useEffect, useCallback, createContext, useContext, useMemo } from 'https://esm.sh/react@18.2.0';
+        import React, { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
         import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -189,6 +189,7 @@
             const [recentTransactions, setRecentTransactions] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
+            const fileInputRef = useRef(null); // Ref for file input
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
@@ -408,6 +409,173 @@
                 setTransactionToDelete(null);
             };
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "วันที่,ชื่อสินค้า,หน่วยนับ,จำนวน,เลขที่ PO,เลขที่ IV\n";
+                filteredRecentTransactions.forEach(transaction => {
+                    const dateFormatted = formatDate(transaction.date);
+                    const po = transaction.poNumber || '';
+                    csvContent += `"${dateFormatted}","${transaction.itemName}","${transaction.unit}",${transaction.quantity},"${po}","${transaction.ivNumber}"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายการรับเข้า_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) {
+                    return;
+                }
+
+                if (file.type !== 'text/csv') {
+                    setMessage('กรุณาอัปโหลดไฟล์ CSV เท่านั้น.');
+                    setMessageType('error');
+                    return;
+                }
+
+                setIsLoading(true);
+                setMessage('');
+                setMessageType('');
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const text = e.target.result;
+                    const lines = text.split('\n').filter(line => line.trim() !== '');
+                    if (lines.length === 0) {
+                        setMessage('ไฟล์ CSV ว่างเปล่า.');
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    const expectedHeaders = ["วันที่", "ชื่อสินค้า", "หน่วยนับ", "จำนวน", "เลขที่ PO", "เลขที่ IV"];
+
+                    // Basic header validation
+                    if (!expectedHeaders.every(h => headers.includes(h))) {
+                        setMessage(`โครงสร้างไฟล์ CSV ไม่ถูกต้อง. ต้องมีคอลัมน์: ${expectedHeaders.join(', ')}`);
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const records = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',');
+                        if (values.length !== headers.length) {
+                            console.warn(`Skipping malformed row ${i + 1}: ${lines[i]}`);
+                            continue; // Skip malformed rows
+                        }
+                        const record = {};
+                        headers.forEach((header, index) => {
+                            record[header] = values[index].trim();
+                        });
+                        records.push(record);
+                    }
+
+                    if (records.length === 0) {
+                        setMessage('ไม่พบข้อมูลที่ถูกต้องในไฟล์ CSV.');
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const batch = writeBatch(db);
+                    let successCount = 0;
+                    let errorCount = 0;
+                    const errors = [];
+
+                    for (const record of records) {
+                        try {
+                            const recordDate = new Date(record["วันที่"]);
+                            const recordQuantity = parseFloat(record["จำนวน"]);
+
+                            if (isNaN(recordDate.getTime())) {
+                                throw new Error(`วันที่ไม่ถูกต้อง: ${record["วันที่"]}`);
+                            }
+                            if (isNaN(recordQuantity) || recordQuantity <= 0) {
+                                throw new Error(`จำนวนไม่ถูกต้อง: ${record["จำนวน"]}`);
+                            }
+                            if (!record["ชื่อสินค้า"] || !record["หน่วยนับ"] || !record["เลขที่ IV"]) {
+                                throw new Error(`ข้อมูลไม่ครบถ้วน (ชื่อสินค้า, หน่วยนับ, เลขที่ IV)`);
+                            }
+
+                            // 1. Add/Update item master data
+                            const existingItemQuery = query(itemsCollectionRef, where('name', '==', record["ชื่อสินค้า"]));
+                            const existingItemSnapshot = await getDocs(existingItemQuery); // Use getDocs for query
+
+                            let itemDocRef;
+                            if (existingItemSnapshot.empty) {
+                                itemDocRef = doc(itemsCollectionRef);
+                                batch.set(itemDocRef, {
+                                    name: record["ชื่อสินค้า"],
+                                    unit: record["หน่วยนับ"],
+                                    minStock: 0,
+                                });
+                            } else {
+                                itemDocRef = existingItemSnapshot.docs[0].ref;
+                                if (existingItemSnapshot.docs[0].data().unit !== record["หน่วยนับ"]) {
+                                    batch.update(itemDocRef, { unit: record["หน่วยนับ"] });
+                                }
+                            }
+
+                            // 2. Add transaction
+                            const newTransactionRef = doc(transactionsCollectionRef);
+                            batch.set(newTransactionRef, {
+                                date: recordDate,
+                                itemName: record["ชื่อสินค้า"],
+                                unit: record["หน่วยนับ"],
+                                quantity: recordQuantity,
+                                type: 'receive',
+                                poNumber: record["เลขที่ PO"] || '',
+                                ivNumber: record["เลขที่ IV"],
+                                userId: userId,
+                            });
+                            successCount++;
+                        } catch (error) {
+                            errorCount++;
+                            errors.push(`แถว: ${record["ชื่อสินค้า"]} (IV: ${record["เลขที่ IV"]}) - ${error.message}`);
+                            console.error("Error processing record:", record, error);
+                        }
+                    }
+
+                    try {
+                        await batch.commit();
+                        if (errors.length > 0) {
+                            setMessage(`อัปโหลดเสร็จสิ้น. สำเร็จ ${successCount} รายการ, ผิดพลาด ${errorCount} รายการ: ${errors.join('; ')}`);
+                            setMessageType('warning');
+                        } else {
+                            setMessage(`อัปโหลดสำเร็จ ${successCount} รายการ!`);
+                            setMessageType('success');
+                        }
+                    } catch (batchError) {
+                        console.error("Batch commit failed:", batchError);
+                        setMessage(`เกิดข้อผิดพลาดในการบันทึกข้อมูลที่อัปโหลด: ${batchError.message}`);
+                        setMessageType('error');
+                    } finally {
+                        setIsLoading(false);
+                        if (fileInputRef.current) {
+                            fileInputRef.current.value = ''; // Clear file input
+                        }
+                    }
+                };
+                reader.onerror = () => {
+                    setMessage('ไม่สามารถอ่านไฟล์ได้.');
+                    setMessageType('error');
+                    setIsLoading(false);
+                };
+                reader.readAsText(file);
+            };
+
             // Filter recent transactions based on search term
             const filteredRecentTransactions = recentTransactions.filter(transaction =>
                 transaction.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -517,7 +685,7 @@
                             type: 'text',
                             id: 'ivNumber',
                             value: ivNumber,
-                            onChange: handleIvNumberChange,
+                            onChange: (e) => handleIvNumberChange(e),
                             className: `mt-1 block w-full px-4 py-2 border ${ivNumberError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
                             required: true,
                         }),
@@ -537,17 +705,41 @@
                         )
                     )
                 ),
+                React.createElement(
+                    'div',
+                    { className: 'mt-8 p-6 border border-gray-200 rounded-xl shadow-sm bg-gray-50' },
+                    React.createElement('h3', { className: 'text-2xl font-bold text-gray-700 mb-4' }, 'อัปโหลดไฟล์ CSV (รับเข้าสินค้า)'),
+                    React.createElement('p', { className: 'text-sm text-gray-600 mb-4' }, 'ไฟล์ CSV ควรมีหัวข้อ (headers) ดังนี้: ', React.createElement('code', { className: 'font-mono bg-gray-200 p-1 rounded' }, 'วันที่,ชื่อสินค้า,หน่วยนับ,จำนวน,เลขที่ PO,เลขที่ IV')),
+                    React.createElement('input', {
+                        type: 'file',
+                        accept: '.csv',
+                        onChange: handleFileUpload,
+                        className: 'block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer',
+                        ref: fileInputRef,
+                        disabled: isLoading,
+                    }),
+                    isLoading && React.createElement('p', { className: 'text-blue-600 text-sm mt-2' }, 'กำลังอัปโหลดและประมวลผล...')
+                ),
                 React.createElement('h3', { className: 'text-2xl font-bold text-gray-800 mt-12 mb-6 border-b pb-4' }, 'รายการรับเข้าล่าสุด'),
                 React.createElement(
                     'div',
-                    { className: 'mb-4' },
+                    { className: 'flex flex-col sm:flex-row justify-between items-center mb-6 gap-4' },
                     React.createElement('input', {
                         type: 'text',
                         placeholder: 'ค้นหารายการรับเข้า...',
                         value: searchTerm,
                         onChange: (e) => setSearchTerm(e.target.value),
-                        className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                    })
+                        className: 'w-full sm:w-auto flex-grow px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                    }),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleExportCSV,
+                            className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                            disabled: isLoading || filteredRecentTransactions.length === 0,
+                        },
+                        'ส่งออกเป็น CSV'
+                    )
                 ),
                 isLoading ? (
                     React.createElement('div', { className: 'text-center text-gray-600 py-8' }, 'กำลังโหลดรายการ...')
@@ -639,6 +831,7 @@
             const [isLoading, setIsLoading] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
             const [currentAvailableStock, setCurrentAvailableStock] = useState(null);
+            const fileInputRef = useRef(null); // Ref for file input
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
@@ -887,6 +1080,162 @@
                 setTransactionToDelete(null);
             };
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "วันที่,ชื่อสินค้า,หน่วยนับ,จำนวน,เลขที่ IV\n";
+                filteredRecentTransactions.forEach(transaction => {
+                    const dateFormatted = formatDate(transaction.date);
+                    csvContent += `"${dateFormatted}","${transaction.itemName}","${transaction.unit}",${Math.abs(transaction.quantity)},"${transaction.ivNumber}"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายการจ่ายออก_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) {
+                    return;
+                }
+
+                if (file.type !== 'text/csv') {
+                    setMessage('กรุณาอัปโหลดไฟล์ CSV เท่านั้น.');
+                    setMessageType('error');
+                    return;
+                }
+
+                setIsLoading(true);
+                setMessage('');
+                setMessageType('');
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const text = e.target.result;
+                    const lines = text.split('\n').filter(line => line.trim() !== '');
+                    if (lines.length === 0) {
+                        setMessage('ไฟล์ CSV ว่างเปล่า.');
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    const expectedHeaders = ["วันที่", "ชื่อสินค้า", "หน่วยนับ", "จำนวน", "เลขที่ IV"];
+
+                    // Basic header validation
+                    if (!expectedHeaders.every(h => headers.includes(h))) {
+                        setMessage(`โครงสร้างไฟล์ CSV ไม่ถูกต้อง. ต้องมีคอลัมน์: ${expectedHeaders.join(', ')}`);
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const records = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',');
+                        if (values.length !== headers.length) {
+                            console.warn(`Skipping malformed row ${i + 1}: ${lines[i]}`);
+                            continue; // Skip malformed rows
+                        }
+                        const record = {};
+                        headers.forEach((header, index) => {
+                            record[header] = values[index].trim();
+                        });
+                        records.push(record);
+                    }
+
+                    if (records.length === 0) {
+                        setMessage('ไม่พบข้อมูลที่ถูกต้องในไฟล์ CSV.');
+                        setMessageType('error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const batch = writeBatch(db);
+                    let successCount = 0;
+                    let errorCount = 0;
+                    const errors = [];
+
+                    for (const record of records) {
+                        try {
+                            const recordDate = new Date(record["วันที่"]);
+                            const recordQuantity = parseFloat(record["จำนวน"]);
+
+                            if (isNaN(recordDate.getTime())) {
+                                throw new Error(`วันที่ไม่ถูกต้อง: ${record["วันที่"]}`);
+                            }
+                            if (isNaN(recordQuantity) || recordQuantity <= 0) {
+                                throw new Error(`จำนวนไม่ถูกต้อง: ${record["จำนวน"]}`);
+                            }
+                            if (!record["ชื่อสินค้า"] || !record["หน่วยนับ"] || !record["เลขที่ IV"]) {
+                                throw new Error(`ข้อมูลไม่ครบถ้วน (ชื่อสินค้า, หน่วยนับ, เลขที่ IV)`);
+                            }
+
+                            // 1. Check if item exists in master data (important for issue)
+                            const existingItemQuery = query(itemsCollectionRef, where('name', '==', record["ชื่อสินค้า"]));
+                            const existingItemSnapshot = await getDocs(existingItemQuery);
+
+                            if (existingItemSnapshot.empty) {
+                                throw new Error(`สินค้า "${record["ชื่อสินค้า"]}" ไม่มีอยู่ในระบบ ไม่สามารถจ่ายออกได้.`);
+                            }
+
+                            // 2. Add transaction (quantity is negative for issue)
+                            const newTransactionRef = doc(transactionsCollectionRef);
+                            batch.set(newTransactionRef, {
+                                date: recordDate,
+                                itemName: record["ชื่อสินค้า"],
+                                unit: record["หน่วยนับ"],
+                                quantity: -recordQuantity, // Negative for issue
+                                type: 'issue',
+                                poNumber: '', // Not applicable for issue
+                                ivNumber: record["เลขที่ IV"],
+                                userId: userId,
+                            });
+                            successCount++;
+                        } catch (error) {
+                            errorCount++;
+                            errors.push(`แถว: ${record["ชื่อสินค้า"]} (IV: ${record["เลขที่ IV"]}) - ${error.message}`);
+                            console.error("Error processing record:", record, error);
+                        }
+                    }
+
+                    try {
+                        await batch.commit();
+                        if (errors.length > 0) {
+                            setMessage(`อัปโหลดเสร็จสิ้น. สำเร็จ ${successCount} รายการ, ผิดพลาด ${errorCount} รายการ: ${errors.join('; ')}`);
+                            setMessageType('warning');
+                        } else {
+                            setMessage(`อัปโหลดสำเร็จ ${successCount} รายการ!`);
+                            setMessageType('success');
+                        }
+                    } catch (batchError) {
+                        console.error("Batch commit failed:", batchError);
+                        setMessage(`เกิดข้อผิดพลาดในการบันทึกข้อมูลที่อัปโหลด: ${batchError.message}`);
+                        setMessageType('error');
+                    } finally {
+                        setIsLoading(false);
+                        if (fileInputRef.current) {
+                            fileInputRef.current.value = ''; // Clear file input
+                        }
+                    }
+                };
+                reader.onerror = () => {
+                    setMessage('ไม่สามารถอ่านไฟล์ได้.');
+                    setMessageType('error');
+                    setIsLoading(false);
+                };
+                reader.readAsText(file);
+            };
+
+
             // Filter recent transactions based on search term
             const filteredRecentTransactions = recentTransactions.filter(transaction =>
                 transaction.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1005,17 +1354,41 @@
                         )
                     )
                 ),
+                React.createElement(
+                    'div',
+                    { className: 'mt-8 p-6 border border-gray-200 rounded-xl shadow-sm bg-gray-50' },
+                    React.createElement('h3', { className: 'text-2xl font-bold text-gray-700 mb-4' }, 'อัปโหลดไฟล์ CSV (จ่ายออกสินค้า)'),
+                    React.createElement('p', { className: 'text-sm text-gray-600 mb-4' }, 'ไฟล์ CSV ควรมีหัวข้อ (headers) ดังนี้: ', React.createElement('code', { className: 'font-mono bg-gray-200 p-1 rounded' }, 'วันที่,ชื่อสินค้า,หน่วยนับ,จำนวน,เลขที่ IV')),
+                    React.createElement('input', {
+                        type: 'file',
+                        accept: '.csv',
+                        onChange: handleFileUpload,
+                        className: 'block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor:pointer',
+                        ref: fileInputRef,
+                        disabled: isLoading,
+                    }),
+                    isLoading && React.createElement('p', { className: 'text-blue-600 text-sm mt-2' }, 'กำลังอัปโหลดและประมวลผล...')
+                ),
                 React.createElement('h3', { className: 'text-2xl font-bold text-gray-800 mt-12 mb-6 border-b pb-4' }, 'รายการจ่ายออกล่าสุด'),
                 React.createElement(
                     'div',
-                    { className: 'mb-4' },
+                    { className: 'flex flex-col sm:flex-row justify-between items-center mb-6 gap-4' },
                     React.createElement('input', {
                         type: 'text',
                         placeholder: 'ค้นหารายการจ่ายออก...',
                         value: searchTerm,
                         onChange: (e) => setSearchTerm(e.target.value),
-                        className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                    })
+                        className: 'w-full sm:w-auto flex-grow px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                    }),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleExportCSV,
+                            className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                            disabled: isLoading || filteredRecentTransactions.length === 0,
+                        },
+                        'ส่งออกเป็น CSV'
+                    )
                 ),
                 isLoading ? (
                     React.createElement('div', { className: 'text-center text-gray-600 py-8' }, 'กำลังโหลดรายการ...')
@@ -1323,6 +1696,25 @@
                 }
             };
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "ชื่อสินค้า,หน่วยนับ,จำนวนสินค้าคงเหลือ,จำนวนขั้นต่ำ,สถานะการเติมสินค้า\n";
+                sortedAndFilteredStockItems.forEach(item => {
+                    csvContent += `"${item.name}","${item.unit}",${item.currentStock},${item.minStock},"${item.status}"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `สินค้าคงเหลือ_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
 
             return React.createElement(
                 'div',
@@ -1351,6 +1743,15 @@
                             onChange: (e) => setSearchTerm(e.target.value),
                             className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
                         })
+                    ),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleExportCSV,
+                            className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                            disabled: isLoading || sortedAndFilteredStockItems.length === 0,
+                        },
+                        'ส่งออกเป็น CSV'
                     )
                 ),
                 isLoading ? (
@@ -1431,19 +1832,19 @@
         function StockBalanceByIV({ setCurrentPage, setReportSelectedItem }) {
             const { db, userId, publicDataPath } = useContext(FirebaseContext);
             const [allTransactions, setAllTransactions] = useState([]); // Store all transactions
-            const [transactionsByIV, setTransactionsByIV] = useState({}); // Grouped and filtered
+            const [itemsListForDropdown, setItemsListForDropdown] = useState([]); // List of unique item names for dropdown
+            const [selectedItemName, setSelectedItemName] = useState(''); // Selected item from the dropdown
+            const [stockByIVSummary, setStockByIVSummary] = useState([]); // Summarized stock by IV
             const [message, setMessage] = useState('');
             const [messageType, setMessageType] = useState('');
             const [isLoading, setIsLoading] = useState(true);
             const [searchTermIV, setSearchTermIV] = useState('');
-            const [searchTermItemInIV, setSearchTermItemInIV] = useState('');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
-            const [expandedIVs, setExpandedIVs] = useState(new Set()); // To manage collapsible sections
 
             const transactionsCollectionRef = collection(db, `${publicDataPath}/transactions`);
 
-            // Fetch all transactions
+            // Fetch all transactions and unique item names for dropdown
             useEffect(() => {
                 if (!db || !userId) return;
                 setIsLoading(true);
@@ -1451,6 +1852,11 @@
                 const unsubscribe = onSnapshot(transactionsCollectionRef, (snapshot) => {
                     const fetchedTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setAllTransactions(fetchedTransactions);
+
+                    // Extract unique item names for the dropdown
+                    const uniqueItemNames = [...new Set(fetchedTransactions.map(t => t.itemName))].sort();
+                    setItemsListForDropdown(uniqueItemNames);
+
                     setIsLoading(false);
                 }, (error) => {
                     console.error("Error fetching transactions:", error);
@@ -1464,7 +1870,7 @@
 
             // Process and filter transactions whenever allTransactions or filters change
             useEffect(() => {
-                const filteredAndGrouped = {};
+                const ivAggregates = {};
                 const sDate = startDate ? new Date(startDate + 'T00:00:00') : null; // Ensure start of day
                 const eDate = endDate ? new Date(endDate + 'T23:59:59') : null;   // Ensure end of day
 
@@ -1482,87 +1888,64 @@
                     if (sDate && transactionDate < sDate) return;
                     if (eDate && transactionDate > eDate) return;
 
-                    if (!filteredAndGrouped[iv]) {
-                        filteredAndGrouped[iv] = {
-                            transactions: [],
-                            totalReceived: 0,
-                            totalIssued: 0,
-                            uniqueItems: new Set(),
-                            firstDate: new Date('2099-01-01'), // Initialize with a future date
-                            lastDate: new Date('1900-01-01'),  // Initialize with a past date
-                        };
-                    }
-
-                    // Filter by item name within IV
-                    if (searchTermItemInIV && !data.itemName.toLowerCase().includes(searchTermItemInIV.toLowerCase())) {
-                        // Do not add to this IV's list if it doesn't match item search
+                    // Filter by selected item name from dropdown
+                    if (selectedItemName && data.itemName !== selectedItemName) {
                         return;
                     }
 
-                    filteredAndGrouped[iv].transactions.push(data);
-                    if (data.quantity > 0) {
-                        filteredAndGrouped[iv].totalReceived += data.quantity;
-                    } else {
-                        filteredAndGrouped[iv].totalIssued += Math.abs(data.quantity);
+                    if (!ivAggregates[iv]) {
+                        ivAggregates[iv] = {
+                            ivNumber: iv,
+                            totalRemaining: 0,
+                            itemsInIV: new Map(), // To store item details within this IV if needed for export
+                        };
                     }
-                    filteredAndGrouped[iv].uniqueItems.add(data.itemName);
 
-                    // Update first and last dates
-                    if (transactionDate < filteredAndGrouped[iv].firstDate) {
-                        filteredAndGrouped[iv].firstDate = transactionDate;
-                    }
-                    if (transactionDate > filteredAndGrouped[iv].lastDate) {
-                        filteredAndGrouped[iv].lastDate = transactionDate;
+                    ivAggregates[iv].totalRemaining += data.quantity;
+
+                    // Store item details for CSV export if a specific item is selected
+                    if (selectedItemName) {
+                        const currentItemQuantity = ivAggregates[iv].itemsInIV.get(data.itemName) || 0;
+                        ivAggregates[iv].itemsInIV.set(data.itemName, currentItemQuantity + data.quantity);
                     }
                 });
 
-                // Sort IV numbers and transactions within each IV
-                const sortedIVs = Object.keys(filteredAndGrouped).sort().reduce(
-                    (obj, key) => {
-                        // Sort transactions within each IV by date
-                        filteredAndGrouped[key].transactions.sort((a, b) => a.date.toDate() - b.date.toDate());
-                        obj[key] = filteredAndGrouped[key];
-                        return obj;
-                    },
-                    {}
-                );
+                // Convert aggregated data to an array and sort by totalRemaining
+                const finalSummary = Object.values(ivAggregates)
+                    .filter(ivData => ivData.totalRemaining !== 0) // Only show IVs with remaining stock
+                    .sort((a, b) => b.totalRemaining - a.totalRemaining); // Sort by totalRemaining (descending)
 
-                setTransactionsByIV(sortedIVs);
-            }, [allTransactions, searchTermIV, startDate, endDate, searchTermItemInIV]);
+                setStockByIVSummary(finalSummary);
+            }, [allTransactions, searchTermIV, startDate, endDate, selectedItemName]);
 
-            const toggleExpand = (ivNumber) => {
-                setExpandedIVs(prev => {
-                    const newSet = new Set(prev);
-                    if (newSet.has(ivNumber)) {
-                        newSet.delete(ivNumber);
-                    } else {
-                        newSet.add(ivNumber);
-                    }
-                    return newSet;
-                });
-            };
 
             const handleExportCSV = () => {
-                // Add BOM for proper UTF-8 handling in Excel
-                let csvContent = "\uFEFF" + "เลขที่ IV,วันที่,ชื่อสินค้า,หน่วยนับ,ประเภท,จำนวน,เลขที่ PO\n";
+                let csvContent = "\uFEFF"; // BOM for UTF-8
 
-                Object.entries(transactionsByIV).forEach(([ivNumber, data]) => {
-                    csvContent += `"${ivNumber}","","","","","",""\n`; // IV header row
-                    data.transactions.forEach(transaction => {
-                        const dateFormatted = formatDate(transaction.date);
-                        const typeText = transaction.type === 'receive' ? 'รับเข้า' : 'จ่ายออก';
-                        const quantityAbs = Math.abs(transaction.quantity);
-                        const po = transaction.poNumber || '';
-                        csvContent += `"", "${dateFormatted}","${transaction.itemName}","${transaction.unit}","${typeText}",${quantityAbs},"${po}"\n`;
+                if (selectedItemName) {
+                    // Export detailed view for selected item
+                    csvContent += `ชื่อสินค้า,IV,คงเหลือ\n`;
+                    stockByIVSummary.forEach(ivData => {
+                        const itemQuantity = ivData.itemsInIV.get(selectedItemName);
+                        if (itemQuantity !== undefined && itemQuantity !== 0) {
+                            csvContent += `"${selectedItemName}","${ivData.ivNumber}",${itemQuantity}\n`;
+                        }
                     });
-                });
+                } else {
+                    // Export summarized view for all IVs
+                    csvContent += `เลขที่ IV,คงเหลือรวม\n`;
+                    stockByIVSummary.forEach(ivData => {
+                        csvContent += `"${ivData.ivNumber}",${ivData.totalRemaining}\n`;
+                    });
+                }
+
 
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 if (link.download !== undefined) {
                     const url = URL.createObjectURL(blob);
                     link.setAttribute('href', url);
-                    link.setAttribute('download', `รายงานสินค้าคงเหลือ_แยกIV_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.setAttribute('download', `สินค้าคงเหลือ_แยกIV_${new Date().toISOString().split('T')[0]}.csv`);
                     link.style.visibility = 'hidden';
                     document.body.appendChild(link);
                     link.click();
@@ -1589,13 +1972,31 @@
                     React.createElement(
                         'div',
                         null,
+                        React.createElement('label', { htmlFor: 'selectItemForIV', className: 'block text-sm font-semibold text-gray-700 mb-1' }, 'เลือกสินค้า:'),
+                        React.createElement(
+                            'select',
+                            {
+                                id: 'selectItemForIV',
+                                value: selectedItemName,
+                                onChange: (e) => setSelectedItemName(e.target.value),
+                                className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
+                            },
+                            React.createElement('option', { value: '' }, '-- แสดงสินค้าทั้งหมด --'),
+                            itemsListForDropdown.map((name, index) =>
+                                React.createElement('option', { key: index, value: name }, name)
+                            )
+                        )
+                    ),
+                    React.createElement(
+                        'div',
+                        null,
                         React.createElement('label', { htmlFor: 'searchIV', className: 'block text-sm font-semibold text-gray-700 mb-1' }, 'ค้นหาเลขที่ IV:'),
                         React.createElement('input', {
                             type: 'text',
                             id: 'searchIV',
                             value: searchTermIV,
                             onChange: (e) => setSearchTermIV(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                             placeholder: 'ค้นหาเลขที่ IV',
                         })
                     ),
@@ -1608,7 +2009,7 @@
                             id: 'startDate',
                             value: startDate,
                             onChange: (e) => setStartDate(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                         }),
                         // Display formatted date for user
                         startDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(startDate)))
@@ -1622,7 +2023,7 @@
                             id: 'endDate',
                             value: endDate,
                             onChange: (e) => setEndDate(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                         }),
                         // Display formatted date for user
                         endDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(endDate)))
@@ -1635,7 +2036,7 @@
                             {
                                 onClick: handleExportCSV,
                                 className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
-                                disabled: isLoading || Object.keys(transactionsByIV).length === 0,
+                                disabled: isLoading || stockByIVSummary.length === 0,
                             },
                             'ส่งออกเป็น CSV'
                         )
@@ -1644,123 +2045,34 @@
 
                 isLoading ? (
                     React.createElement('div', { className: 'text-center text-gray-600 py-8' }, 'กำลังโหลดรายการตามเลขที่ IV...')
-                ) : Object.keys(transactionsByIV).length === 0 ? (
+                ) : stockByIVSummary.length === 0 ? (
                     React.createElement('p', { className: 'text-gray-600 py-8 text-center' }, 'ไม่พบรายการเคลื่อนไหวสินค้าที่ระบุเลขที่ IV ที่ตรงกับเงื่อนไข.')
                 ) : (
                     React.createElement(
                         'div',
-                        { className: 'space-y-6' },
-                        Object.entries(transactionsByIV).map(([ivNumber, data]) =>
+                        { className: 'overflow-x-auto rounded-xl shadow-md border border-gray-200' },
+                        React.createElement(
+                            'table',
+                            { className: 'min-w-full divide-y divide-gray-200' },
                             React.createElement(
-                                'div',
-                                { key: ivNumber, className: 'border border-gray-200 rounded-xl shadow-md' },
+                                'thead',
+                                { className: 'bg-blue-50' },
                                 React.createElement(
-                                    'div',
-                                    {
-                                        className: 'bg-blue-50 p-4 cursor-pointer flex justify-between items-center rounded-t-xl hover:bg-blue-100 transition-colors duration-200',
-                                        onClick: () => toggleExpand(ivNumber),
-                                    },
+                                    'tr',
+                                    null,
+                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, 'เลขที่ IV'),
+                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, 'คงเหลือรวม')
+                                )
+                            ),
+                            React.createElement(
+                                'tbody',
+                                { className: 'bg-white divide-y divide-gray-200' },
+                                stockByIVSummary.map((ivData) =>
                                     React.createElement(
-                                        'h3',
-                                        { className: 'text-xl font-bold text-blue-800' },
-                                        'เลขที่ IV: ',
-                                        ivNumber
-                                    ),
-                                    React.createElement(
-                                        'span',
-                                        { className: 'text-blue-600 text-sm' },
-                                        expandedIVs.has(ivNumber) ? 'ซ่อนรายละเอียด ▲' : 'แสดงรายละเอียด ▼'
-                                    )
-                                ),
-
-                                /* Summary Section */
-                                React.createElement(
-                                    'div',
-                                    { className: 'p-4 border-b border-gray-200 bg-white grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-700' },
-                                    React.createElement('p', null, React.createElement('strong', null, 'รับเข้าทั้งหมด:'), ' ', data.totalReceived, ' หน่วย'),
-                                    React.createElement('p', null, React.createElement('strong', null, 'จ่ายออกทั้งหมด:'), ' ', data.totalIssued, ' หน่วย'),
-                                    React.createElement('p', null, React.createElement('strong', null, 'สินค้าไม่ซ้ำ:'), ' ', data.uniqueItems.size, ' ชนิด'),
-                                    React.createElement('p', null, React.createElement('strong', null, 'ช่วงวันที่:'), ' ', formatDate(data.firstDate), ' - ', formatDate(data.lastDate))
-                                ),
-
-                                expandedIVs.has(ivNumber) &&
-                                React.createElement(
-                                    'div',
-                                    { className: 'p-4 bg-white' },
-                                    React.createElement(
-                                        'div',
-                                        { className: 'mb-4' },
-                                        React.createElement('label', { htmlFor: `searchItemInIV-${ivNumber}`, className: 'block text-sm font-semibold text-gray-700 mb-1' }, 'ค้นหาสินค้าใน IV นี้:'),
-                                        React.createElement('input', {
-                                            type: 'text',
-                                            id: `searchItemInIV-${ivNumber}`,
-                                            value: searchTermItemInIV,
-                                            onChange: (e) => setSearchTermItemInIV(e.target.value),
-                                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                                            placeholder: 'ค้นหาชื่อสินค้า...',
-                                        })
-                                    ),
-                                    React.createElement(
-                                        'div',
-                                        { className: 'overflow-x-auto rounded-lg border border-gray-200' },
-                                        React.createElement(
-                                            'table',
-                                            { className: 'min-w-full divide-y divide-gray-200' },
-                                            React.createElement(
-                                                'thead',
-                                                { className: 'bg-gray-50' },
-                                                React.createElement(
-                                                    'tr',
-                                                    null,
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'วันที่'),
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'ชื่อสินค้า'),
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'หน่วยนับ'),
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'ประเภท'),
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'จำนวน'),
-                                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider' }, 'เลขที่ PO')
-                                                )
-                                            ),
-                                            React.createElement(
-                                                'tbody',
-                                                { className: 'bg-white divide-y divide-gray-200' },
-                                                data.transactions.length === 0 ? (
-                                                    React.createElement(
-                                                        'tr',
-                                                        null,
-                                                        React.createElement('td', { colSpan: '6', className: 'px-6 py-4 text-center text-sm text-gray-500' }, 'ไม่พบรายการสินค้าที่ตรงกับคำค้นหาใน IV นี้.')
-                                                    )
-                                                ) : (
-                                                    data.transactions.map((transaction, index) =>
-                                                        React.createElement(
-                                                            'tr',
-                                                            { key: index, className: 'hover:bg-gray-50' },
-                                                            React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, formatDate(transaction.date)),
-                                                            React.createElement(
-                                                                'td',
-                                                                { className: 'px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:underline cursor-pointer', onClick: () => navigateToReport(transaction.itemName) },
-                                                                transaction.itemName
-                                                            ),
-                                                            React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, transaction.unit),
-                                                            React.createElement(
-                                                                'td',
-                                                                { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' },
-                                                                React.createElement(
-                                                                    'span',
-                                                                    {
-                                                                        className: `px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                                            transaction.type === 'receive' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                                                        }`,
-                                                                    },
-                                                                    transaction.type === 'receive' ? 'รับเข้า' : 'จ่ายออก'
-                                                                )
-                                                            ),
-                                                            React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, Math.abs(transaction.quantity)),
-                                                            React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, transaction.poNumber || '-')
-                                                        )
-                                                    )
-                                                )
-                                            )
-                                        )
+                                        'tr',
+                                        { key: ivData.ivNumber, className: 'hover:bg-gray-50' },
+                                        React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, ivData.ivNumber),
+                                        React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, ivData.totalRemaining)
                                     )
                                 )
                             )
@@ -1880,6 +2192,29 @@
 
             const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "วันที่,ประเภท,จำนวน,หน่วยนับ,เลขที่ PO,เลขที่ IV,ยอดคงเหลือ\n";
+                filteredMovements.forEach(movement => {
+                    const dateFormatted = formatDate(movement.date);
+                    const typeText = movement.type === 'receive' ? 'รับเข้า' : movement.type === 'issue' ? 'จ่ายออก' : movement.type === 'adjustment_in' ? 'ปรับเพิ่ม' : 'ปรับลด';
+                    const po = movement.poNumber || '';
+                    const iv = movement.ivNumber || '';
+                    csvContent += `"${dateFormatted}","${typeText}",${Math.abs(movement.quantity)},"${movement.unit}","${po}","${iv}",${movement.runningBalance}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายงานเคลื่อนไหว_${selectedItem}_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
             return React.createElement(
                 'div',
                 { className: 'bg-white p-8 rounded-2xl shadow-lg border border-gray-100 mb-8' },
@@ -1898,7 +2233,7 @@
                                 id: 'selectItem',
                                 value: selectedItem,
                                 onChange: (e) => setSelectedItem(e.target.value),
-                                className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                                className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                             },
                             React.createElement('option', { value: '' }, '-- เลือกสินค้า --'),
                             items.map((name, index) =>
@@ -1915,7 +2250,7 @@
                             id: 'reportStartDate',
                             value: startDate,
                             onChange: (e) => setStartDate(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                         }),
                         // Display formatted date for user
                         startDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(startDate)))
@@ -1929,7 +2264,7 @@
                             id: 'reportEndDate',
                             value: endDate,
                             onChange: (e) => setEndDate(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                         }),
                         // Display formatted date for user
                         endDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(endDate)))
@@ -1937,16 +2272,24 @@
                     selectedItem &&
                     React.createElement(
                         'div',
-                        { className: 'md:col-span-3' },
-                        React.createElement('label', { htmlFor: 'searchMovement', className: 'block text-sm font-semibold text-gray-700 mb-1' }, 'ค้นหาในรายการเคลื่อนไหว:'),
+                        { className: 'md:col-span-3 flex flex-col sm:flex-row justify-between items-center mt-4 gap-4' },
                         React.createElement('input', {
                             type: 'text',
                             id: 'searchMovement',
                             placeholder: 'ค้นหาด้วยชื่อ, หน่วยนับ, เลขที่ IV/PO, ยอดคงเหลือ...',
                             value: searchTerm,
                             onChange: (e) => setSearchTerm(e.target.value),
-                            className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                        })
+                            className: 'w-full sm:w-auto flex-grow px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
+                        }),
+                        React.createElement(
+                            'button',
+                            {
+                                onClick: handleExportCSV,
+                                className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                                disabled: isLoading || filteredMovements.length === 0,
+                            },
+                            'ส่งออกเป็น CSV'
+                        )
                     )
                 ),
 
@@ -2043,7 +2386,7 @@
             const [recentAdjustments, setRecentAdjustments] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
-            const [currentAvailableStock, setCurrentAvailableStock] = useState(null);
+            const [currentAvailableStock, setCurrentAvailableStock] = useState(null); // Declared here
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
@@ -2307,6 +2650,27 @@
                 setTransactionToDelete(null);
             };
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "วันที่,ชื่อสินค้า,หน่วยนับ,จำนวน,ประเภท,เหตุผล\n";
+                filteredRecentAdjustments.forEach(transaction => {
+                    const dateFormatted = formatDate(transaction.date);
+                    const typeText = transaction.type === 'adjustment_in' ? 'เพิ่มสต็อก' : 'ลดสต็อก';
+                    csvContent += `"${dateFormatted}","${transaction.itemName}","${transaction.unit}",${Math.abs(transaction.quantity)},"${typeText}","${transaction.reason || '-'}"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายการปรับปรุงสต็อก_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
             // Filter recent adjustments based on search term
             const filteredRecentAdjustments = recentAdjustments.filter(transaction =>
                 transaction.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2339,7 +2703,7 @@
                             id: 'adjustmentDate',
                             value: date,
                             onChange: (e) => setDate(e.target.value),
-                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                            className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                             required: true,
                         }),
                         // Display formatted date for user
@@ -2354,7 +2718,7 @@
                             id: 'itemNameAdjustment',
                             value: itemName,
                             onChange: handleItemNameChange,
-                            className: `mt-1 block w-full px-4 py-2 border ${itemNameError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${itemNameError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             placeholder: 'เลือกหรือพิมพ์ชื่อสินค้า',
                             required: true,
                         }),
@@ -2374,7 +2738,7 @@
                             id: 'unitAdjustment',
                             value: unit,
                             onChange: handleUnitChange,
-                            className: `mt-1 block w-full px-4 py-2 border ${unitError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${unitError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             placeholder: 'เช่น ชิ้น, กล่อง',
                             required: true,
                         }),
@@ -2389,7 +2753,7 @@
                             id: 'quantityAdjustment',
                             value: quantity,
                             onChange: handleQuantityChange,
-                            className: `mt-1 block w-full px-4 py-2 border ${quantityError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${quantityError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             min: '1',
                             required: true,
                         }),
@@ -2405,7 +2769,7 @@
                             {
                                 value: adjustmentType,
                                 onChange: (e) => setAdjustmentType(e.target.value),
-                                className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                                className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                             },
                             React.createElement('option', { value: 'increase' }, 'เพิ่มสต็อก'),
                             React.createElement('option', { value: 'decrease' }, 'ลดสต็อก')
@@ -2420,7 +2784,7 @@
                             id: 'reasonAdjustment',
                             value: reason,
                             onChange: handleReasonChange,
-                            className: `mt-1 block w-full px-4 py-2 border ${reasonError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${reasonError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             placeholder: 'เช่น สินค้าชำรุด, นับผิด',
                             required: true,
                         }),
@@ -2443,14 +2807,23 @@
                 React.createElement('h3', { className: 'text-2xl font-bold text-gray-800 mt-12 mb-6 border-b pb-4' }, 'รายการปรับปรุงล่าสุด'),
                 React.createElement(
                     'div',
-                    { className: 'mb-4' },
+                    { className: 'flex flex-col sm:flex-row justify-between items-center mb-6 gap-4' },
                     React.createElement('input', {
                         type: 'text',
                         placeholder: 'ค้นหารายการปรับปรุง...',
                         value: searchTerm,
                         onChange: (e) => setSearchTerm(e.target.value),
-                        className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                    })
+                        className: 'w-full sm:w-auto flex-grow px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
+                    }),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleExportCSV,
+                            className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                            disabled: isLoading || filteredRecentAdjustments.length === 0,
+                        },
+                        'ส่งออกเป็น CSV'
+                    )
                 ),
                 isLoading ? (
                     React.createElement('div', { className: 'text-center text-gray-600 py-8' }, 'กำลังโหลดรายการ...')
@@ -2630,6 +3003,36 @@
                 fetchSummaryData();
             }, [fetchSummaryData]);
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "ประเภทรายงาน,ชื่อสินค้า,จำนวน,หน่วยนับ\n";
+
+                csvContent += `"ภาพรวมสต็อก",,"${totalUniqueItems} ชนิด",\n`;
+                csvContent += `,"ยอดรวมสินค้าคงเหลือทั้งหมด","${totalStockQuantity} หน่วย",\n\n`;
+
+                csvContent += `"สินค้า 5 อันดับแรกที่รับเข้ามากที่สุด",,,\n`;
+                topReceivedItems.forEach(item => {
+                    csvContent += `,"${item.name}",${item.quantity},"หน่วย"\n`;
+                });
+                csvContent += `\n`;
+
+                csvContent += `"สินค้า 5 อันดับแรกที่จ่ายออกมากที่สุด",,,\n`;
+                topIssuedItems.forEach(item => {
+                    csvContent += `,"${item.name}",${item.quantity},"หน่วย"\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายงานสรุป_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
             return React.createElement(
                 'div',
                 { className: 'bg-white p-8 rounded-2xl shadow-lg border border-gray-100 mb-8' },
@@ -2644,10 +3047,10 @@
                         { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
                         React.createElement(
                             'div',
-                            { className: 'bg-blue-50 p-6 rounded-xl shadow-sm border border-blue-100' },
-                            React.createElement('h3', { className: 'text-xl font-bold text-blue-800 mb-4' }, 'ภาพรวมสต็อก'),
-                            React.createElement('p', { className: 'text-gray-700 text-lg mb-2' }, React.createElement('strong', null, 'จำนวนชนิดสินค้าทั้งหมด:'), ' ', React.createElement('span', { className: 'text-blue-700 font-semibold' }, totalUniqueItems), ' ชนิด'),
-                            React.createElement('p', { className: 'text-gray-700 text-lg' }, React.createElement('strong', null, 'ยอดรวมสินค้าคงเหลือทั้งหมด:'), ' ', React.createElement('span', { className: 'text-blue-700 font-semibold' }, totalStockQuantity), ' หน่วย')
+                            { className: 'bg-pink-50 p-6 rounded-xl shadow-sm border border-pink-100' },
+                            React.createElement('h3', { className: 'text-xl font-bold text-pink-800 mb-4' }, 'ภาพรวมสต็อก'),
+                            React.createElement('p', { className: 'text-gray-700 text-lg mb-2' }, React.createElement('strong', null, 'จำนวนชนิดสินค้าทั้งหมด:'), ' ', React.createElement('span', { className: 'text-pink-700 font-semibold' }, totalUniqueItems), ' ชนิด'),
+                            React.createElement('p', { className: 'text-gray-700 text-lg' }, React.createElement('strong', null, 'ยอดรวมสินค้าคงเหลือทั้งหมด:'), ' ', React.createElement('span', { className: 'text-pink-700 font-semibold' }, totalStockQuantity), ' หน่วย')
                         ),
                         React.createElement(
                             'div',
@@ -2665,7 +3068,7 @@
                                         id: 'reportSummaryStartDate',
                                         value: reportStartDate,
                                         onChange: (e) => setReportStartDate(e.target.value),
-                                        className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                                        className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                                     }),
                                     // Display formatted date for user
                                     reportStartDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(reportStartDate)))
@@ -2679,10 +3082,23 @@
                                         id: 'reportSummaryEndDate',
                                         value: reportEndDate,
                                         onChange: (e) => setReportEndDate(e.target.value),
-                                        className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
+                                        className: 'mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
                                     }),
                                     // Display formatted date for user
                                     reportEndDate && React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'รูปแบบที่แสดงในรายงาน: ', formatDate(new Date(reportEndDate)))
+                                )
+                            ),
+                            React.createElement(
+                                'div',
+                                { className: 'md:col-span-2 flex justify-end mt-4' },
+                                React.createElement(
+                                    'button',
+                                    {
+                                        onClick: handleExportCSV,
+                                        className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                                        disabled: isLoading || (topReceivedItems.length === 0 && topIssuedItems.length === 0),
+                                    },
+                                    'ส่งออกเป็น CSV'
                                 )
                             )
                         ),
@@ -2956,6 +3372,25 @@
                 setMinStockError('');
             };
 
+            const handleExportCSV = () => {
+                let csvContent = "\uFEFF" + "ชื่อสินค้า,หน่วยนับ,จำนวนขั้นต่ำ\n";
+                filteredItems.forEach(item => {
+                    csvContent += `"${item.name}","${item.unit}",${item.minStock}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `รายการสินค้าหลัก_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
             // Filter items based on search term
             const filteredItems = items.filter(item =>
                 item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2994,7 +3429,7 @@
                             id: 'itemNameMaster',
                             value: itemName,
                             onChange: (e) => { setItemName(e.target.value); setItemNameError(''); },
-                            className: `mt-1 block w-full px-4 py-2 border ${itemNameError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${itemNameError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             placeholder: 'ชื่อสินค้า',
                             required: true,
                             readOnly: !!editingItem, // Make item name read-only when editing
@@ -3011,7 +3446,7 @@
                             id: 'unitMaster',
                             value: unit,
                             onChange: (e) => { setUnit(e.target.value); setUnitError(''); },
-                            className: `mt-1 block w-full px-4 py-2 border ${unitError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${unitError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             placeholder: 'เช่น ชิ้น, กล่อง',
                             required: true,
                         }),
@@ -3026,7 +3461,7 @@
                             id: 'minStockMaster',
                             value: minStock,
                             onChange: (e) => { setMinStock(e.target.value); setMinStockError(''); },
-                            className: `mt-1 block w-full px-4 py-2 border ${minStockError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base`,
+                            className: `mt-1 block w-full px-4 py-2 border ${minStockError ? 'border-red-500' : 'border-gray-300'} rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base`,
                             min: '0',
                             required: true,
                         }),
@@ -3062,14 +3497,23 @@
                 React.createElement('h3', { className: 'text-2xl font-bold text-gray-800 mt-12 mb-6 border-b pb-4' }, 'รายการสินค้าทั้งหมด'),
                 React.createElement(
                     'div',
-                    { className: 'mb-4' },
+                    { className: 'flex flex-col sm:flex-row justify-between items-center mb-6 gap-4' },
                     React.createElement('input', {
                         type: 'text',
                         placeholder: 'ค้นหาสินค้า...',
                         value: searchTerm,
                         onChange: (e) => setSearchTerm(e.target.value),
-                        className: 'w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-400 focus:border-transparent sm:text-base',
-                    })
+                        className: 'w-full sm:w-auto flex-grow px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-purple-400 focus:border-transparent sm:text-base',
+                    }),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleExportCSV,
+                            className: 'px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+                            disabled: isLoading || filteredItems.length === 0,
+                        },
+                        'ส่งออกเป็น CSV'
+                    )
                 ),
                 isLoading ? (
                     React.createElement('div', { className: 'text-center text-gray-600 py-8' }, 'กำลังโหลดรายการสินค้า...')
@@ -3240,7 +3684,7 @@
                     { className: 'min-h-screen bg-gray-100 font-sans antialiased flex flex-col' },
                     React.createElement(
                         'header',
-                        { className: 'bg-gradient-to-br from-blue-100 to-purple-100 text-white shadow-2xl py-6 px-4 sm:px-6 lg:px-8 rounded-b-2xl' },
+                        { className: 'bg-gradient-to-br from-pink-200 to-purple-200 text-white shadow-2xl py-6 px-4 sm:px-6 lg:px-8 rounded-b-2xl' },
                         React.createElement(
                             'div',
                             { className: 'container mx-auto flex flex-col sm:flex-row justify-between items-center' },
@@ -3253,7 +3697,7 @@
                                     {
                                         onClick: () => setCurrentPage('receive'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'receive' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'receive' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'รับเข้าสินค้า'
@@ -3263,7 +3707,7 @@
                                     {
                                         onClick: () => setCurrentPage('issue'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'issue' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'issue' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'จ่ายออกสินค้า'
@@ -3273,7 +3717,7 @@
                                     {
                                         onClick: () => setCurrentPage('stock'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'stock' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'stock' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'สินค้าคงเหลือ'
@@ -3283,7 +3727,7 @@
                                     {
                                         onClick: () => setCurrentPage('stockByIV'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'stockByIV' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'stockByIV' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'สินค้าคงเหลือ (แยกเลขที่ IV)'
@@ -3293,7 +3737,7 @@
                                     {
                                         onClick: () => setCurrentPage('report'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'report' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'report' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'รายงานเคลื่อนไหวสินค้ารายตัว'
@@ -3303,7 +3747,7 @@
                                     {
                                         onClick: () => setCurrentPage('adjustment'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'adjustment' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'adjustment' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'ปรับปรุงสต็อก'
@@ -3313,7 +3757,7 @@
                                     {
                                         onClick: () => setCurrentPage('summary'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'summary' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'summary' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'รายงานสรุป'
@@ -3323,7 +3767,7 @@
                                     {
                                         onClick: () => setCurrentPage('items'),
                                         className: `nav-button px-4 py-2 rounded-full font-semibold text-gray-800 transition-all duration-300 ease-in-out transform ${
-                                            currentPage === 'items' ? 'bg-gradient-to-r from-purple-200 to-indigo-200 shadow-xl' : 'bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300'
+                                            currentPage === 'items' ? 'bg-gradient-to-r from-pink-300 to-purple-300 shadow-xl' : 'bg-gradient-to-r from-pink-100 to-purple-100 hover:from-pink-200 hover:to-purple-200'
                                         }`,
                                     },
                                     'เมนูสินค้า'
