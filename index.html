@@ -26,7 +26,16 @@
 
         // Global variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Your actual Firebase configuration provided by the user
+            apiKey: "AIzaSyCuzjjUtUotgymcA0kqoYTOrxqk49DfSws",
+            authDomain: "inventorymanagementapp-eb01c.firebaseapp.com",
+            projectId: "inventorymanagementapp-eb01c",
+            storageBucket: "inventorymanagementapp-eb01c.firebasestorage.app",
+            messagingSenderId: "313839397834",
+            appId: "1:313839397834:web:7a831faf06cb6fd983bd33",
+            measurementId: "G-9TQR31P0RR"
+        };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         function App() {
@@ -42,6 +51,13 @@
             // Initialize Firebase and authenticate
             useEffect(() => {
                 try {
+                    // Check if firebaseConfig is valid before initializing
+                    if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
+                        setError("Failed to initialize Firebase: Missing or invalid Firebase configuration. Please ensure __firebase_config is correctly set in your Canvas environment.");
+                        setLoading(false);
+                        return;
+                    }
+
                     const app = initializeApp(firebaseConfig);
                     const firestore = getFirestore(app);
                     const firebaseAuth = getAuth(app);
@@ -72,7 +88,7 @@
                     return () => unsubscribe();
                 } catch (e) {
                     console.error("Failed to initialize Firebase:", e);
-                    setError("Failed to initialize the application. Please check your Firebase configuration.");
+                    setError("Failed to initialize the application. Please check your Firebase configuration: " + e.message);
                     setLoading(false);
                 }
             }, []);
