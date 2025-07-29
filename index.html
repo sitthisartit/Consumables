@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบเบิกจ่ายสินค้า</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Inter font from Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body {
@@ -193,7 +190,7 @@
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
-            const itemsPerPage = 10;
+            const itemsPerPage = 50;
 
             // Confirmation Modal states
             const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -835,7 +832,7 @@
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
-            const itemsPerPage = 10;
+            const itemsPerPage = 100;
 
             // Confirmation Modal states
             const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -1924,11 +1921,11 @@
 
                 if (selectedItemName) {
                     // Export detailed view for selected item
-                    csvContent += `ชื่อสินค้า,IV,คงเหลือ\n`;
+                    csvContent += `เลขที่ IV,ชื่อสินค้า,คงเหลือ\n`;
                     stockByIVSummary.forEach(ivData => {
-                        const itemQuantity = ivData.itemsInIV.get(selectedItemName);
-                        if (itemQuantity !== undefined && itemQuantity !== 0) {
-                            csvContent += `"${selectedItemName}","${ivData.ivNumber}",${itemQuantity}\n`;
+                        const itemQuantity = ivData.itemsInIV.get(selectedItemName) || ivData.totalRemaining;
+                        if (itemQuantity !== 0) {
+                             csvContent += `"${ivData.ivNumber}","${selectedItemName}",${itemQuantity}\n`;
                         }
                     });
                 } else {
@@ -2061,7 +2058,8 @@
                                     'tr',
                                     null,
                                     React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, 'เลขที่ IV'),
-                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, 'คงเหลือรวม')
+                                    selectedItemName && React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, 'ชื่อสินค้า'),
+                                    React.createElement('th', { className: 'px-6 py-3 text-left text-xs font-semibold text-blue-800 uppercase tracking-wider' }, selectedItemName ? 'คงเหลือ' : 'คงเหลือรวม')
                                 )
                             ),
                             React.createElement(
@@ -2071,7 +2069,20 @@
                                     React.createElement(
                                         'tr',
                                         { key: ivData.ivNumber, className: 'hover:bg-gray-50' },
-                                        React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, ivData.ivNumber),
+                                        React.createElement(
+                                            'td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' },
+                                            selectedItemName ?
+                                            React.createElement(
+                                                'button',
+                                                {
+                                                    onClick: () => navigateToReport(selectedItemName),
+                                                    className: 'text-blue-600 hover:text-blue-800 font-semibold hover:underline focus:outline-none'
+                                                },
+                                                ivData.ivNumber
+                                            ) :
+                                            ivData.ivNumber
+                                        ),
+                                        selectedItemName && React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, selectedItemName),
                                         React.createElement('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' }, ivData.totalRemaining)
                                     )
                                 )
@@ -2097,7 +2108,7 @@
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
-            const itemsPerPage = 10;
+            const itemsPerPage = 50;
 
             const itemsCollectionRef = collection(db, `${publicDataPath}/items`);
             const transactionsCollectionRef = collection(db, `${publicDataPath}/transactions`);
@@ -2390,7 +2401,7 @@
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
-            const itemsPerPage = 10;
+            const itemsPerPage = 50;
 
             // Confirmation Modal states
             const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -3154,7 +3165,7 @@
 
             // Pagination states
             const [currentPage, setCurrentPage] = useState(1);
-            const itemsPerPage = 10;
+            const itemsPerPage = 50;
 
             // Confirmation Modal states
             const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -3175,7 +3186,18 @@
 
                 const unsubscribe = onSnapshot(itemsCollectionRef, (snapshot) => {
                     const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setItems(itemsData.sort((a, b) => a.name.localeCompare(b.name))); // Sort by name
+
+                    // Filter out duplicates based on item name (case-insensitive)
+                    const uniqueItemsMap = new Map();
+                    itemsData.forEach(item => {
+                        const normalizedName = item.name.trim().toLowerCase();
+                        if (!uniqueItemsMap.has(normalizedName)) {
+                            uniqueItemsMap.set(normalizedName, item);
+                        }
+                    });
+                    const uniqueItems = Array.from(uniqueItemsMap.values());
+
+                    setItems(uniqueItems.sort((a, b) => a.name.localeCompare(b.name))); // Sort by name
                     setIsLoading(false);
                 }, (error) => {
                     console.error("Error fetching items:", error);
@@ -3688,7 +3710,7 @@
                         React.createElement(
                             'div',
                             { className: 'container mx-auto flex flex-col sm:flex-row justify-between items-center' },
-                            React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold mb-4 sm:mb-0 text-gray-800' }, 'ระบบเบิกจ่ายสินค้า'),
+                            React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold mb-4 sm:mb-0 text-gray-800' }, 'เบิก-จ่าย วัสดุสิ้นเปลือง'),
                             React.createElement(
                                 'nav',
                                 { className: 'flex flex-wrap justify-center gap-2 sm:gap-4' },
