@@ -221,7 +221,7 @@
                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                        oninput="searchJobByQR()">
                                 <button onclick="openAndStartQRScanner()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
-                                    <i class="fas fa-camera mr-2"></i>สแกน QR
+                                    <i class="fas fa-qrcode mr-2"></i>สแกน QR
                                 </button>
                             </div>
                         </div>
@@ -250,8 +250,11 @@
                                         <p>กดปุ่มเริ่มสแกนเพื่อเปิดกล้อง</p>
                                     </div>
                                     <div id="scannerOverlay" class="absolute inset-0 hidden">
-                                        <div class="absolute inset-4 border-2 border-red-500 rounded-lg"></div>
-                                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-green-500 rounded-lg animate-pulse"></div>
+                                        <div class="absolute inset-4 border-2 border-blue-500 rounded-lg opacity-50"></div>
+                                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-4 border-green-500 rounded-lg animate-pulse shadow-lg"></div>
+                                        <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white px-3 py-1 rounded-full text-sm">
+                                            วาง QR Code ในกรอบสีเขียว
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
@@ -321,7 +324,12 @@
 
                                     <!-- Position Selection -->
                                     <div id="positionSelection" class="hidden">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">เลือกตำแหน่งจัดเก็บ *</label>
+                                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-medium text-gray-700">เลือกตำแหน่งจัดเก็บ *</label>
+                            <button type="button" onclick="selectAutoPosition()" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg text-sm transition-colors">
+                                <i class="fas fa-magic mr-1"></i> เลือกตำแหน่งว่าง
+                            </button>
+                        </div>
                                         <div class="grid grid-cols-5 gap-2 mb-3" id="positionGrid">
                                             <!-- Position buttons will be generated here -->
                                         </div>
@@ -434,7 +442,7 @@
                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                        oninput="searchIssueJobByQR()">
                                 <button onclick="openAndStartIssueQRScanner()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
-                                    <i class="fas fa-camera mr-2"></i>สแกน QR
+                                    <i class="fas fa-qrcode mr-2"></i>สแกน QR
                                 </button>
                             </div>
                         </div>
@@ -463,8 +471,11 @@
                                         <p>กดปุ่มเริ่มสแกนเพื่อเปิดกล้อง</p>
                                     </div>
                                     <div id="issueScannerOverlay" class="absolute inset-0 hidden">
-                                        <div class="absolute inset-4 border-2 border-red-500 rounded-lg"></div>
-                                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-green-500 rounded-lg animate-pulse"></div>
+                                        <div class="absolute inset-4 border-2 border-red-500 rounded-lg opacity-50"></div>
+                                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-4 border-green-500 rounded-lg animate-pulse shadow-lg"></div>
+                                        <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white px-3 py-1 rounded-full text-sm">
+                                            วาง QR Code ในกรอบสีเขียว
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
@@ -1209,13 +1220,11 @@
 
         function openAndStartQRScanner() {
             document.getElementById('qrScannerModal').classList.remove('hidden');
-            // เรียกสแกนกล้องทันที
+            // เปิดกล้องอัตโนมัติ
             setTimeout(startCameraScanning, 300);
         }
 
-        function startQRScanner() {
-            document.getElementById('qrScannerModal').classList.remove('hidden');
-        }
+
 
         function closeQRScanner() {
             stopCameraScanning();
@@ -1333,23 +1342,25 @@
         }
 
         function handleQRScanResult(qrData) {
-            // Stop scanning
             stopCameraScanning();
             
-            // Show result
-            document.getElementById('scanResultText').textContent = `พบ QR Code: ${qrData}`;
+            // Haptic feedback - ให้มือถือสั่นเมื่อสแกนสำเร็จ
+            if (navigator.vibrate) {
+                navigator.vibrate([150, 50, 150]); // รูปแบบการสั่นที่ชัดเจนขึ้น
+            }
+
+            // แสดงผลลัพธ์การสแกน
+            document.getElementById('scanResultText').textContent = `สแกนสำเร็จ: ${qrData}`;
             document.getElementById('scanResult').classList.remove('hidden');
-            
-            // Set the QR input value
+
             document.getElementById('qrInput').value = qrData;
-            
-            // Search for job
             searchJobByQR();
-            
-            // Close modal after 2 seconds
+
+            // ปิด Modal อัตโนมัติหลัง 1 วินาที (ให้เวลาผู้ใช้เห็นผลลัพธ์)
             setTimeout(() => {
                 closeQRScanner();
-            }, 2000);
+                showNotification('สแกน QR Code สำเร็จ!', 'success');
+            }, 1000);
         }
 
         function loadReceiveJobData() {
@@ -1758,13 +1769,10 @@
 
         function openAndStartIssueQRScanner() {
             document.getElementById('issueQrScannerModal').classList.remove('hidden');
-            // เรียกสแกนกล้องทันที
             setTimeout(startIssueCameraScanning, 300);
         }
 
-        function startIssueQRScanner() {
-            document.getElementById('issueQrScannerModal').classList.remove('hidden');
-        }
+
 
         function closeIssueQRScanner() {
             stopIssueCameraScanning();
@@ -1882,23 +1890,25 @@
         }
 
         function handleIssueQRScanResult(qrData) {
-            // Stop scanning
             stopIssueCameraScanning();
             
-            // Show result
-            document.getElementById('issueScanResultText').textContent = `พบ QR Code: ${qrData}`;
+            // Haptic feedback - ให้มือถือสั่นเมื่อสแกนสำเร็จ
+            if (navigator.vibrate) {
+                navigator.vibrate([150, 50, 150]); // รูปแบบการสั่นที่ชัดเจนขึ้น
+            }
+
+            // แสดงผลลัพธ์การสแกน
+            document.getElementById('issueScanResultText').textContent = `สแกนสำเร็จ: ${qrData}`;
             document.getElementById('issueScanResult').classList.remove('hidden');
-            
-            // Set the QR input value
+
             document.getElementById('issueQrInput').value = qrData;
-            
-            // Search for job
             searchIssueJobByQR();
-            
-            // Close modal after 2 seconds
+
+            // ปิด Modal อัตโนมัติหลัง 1 วินาที (ให้เวลาผู้ใช้เห็นผลลัพธ์)
             setTimeout(() => {
                 closeIssueQRScanner();
-            }, 2000);
+                showNotification('สแกน QR Code สำเร็จ!', 'success');
+            }, 1000);
         }
 
         function loadIssueJobData() {
@@ -2698,6 +2708,23 @@
             showNotification('Export Excel เรียบร้อยแล้ว', 'success');
         }
 
+        function selectAutoPosition() {
+            if (!selectedMainZone) {
+                showNotification('กรุณาเลือกโซนหลักก่อน', 'error');
+                return;
+            }
+            
+            const positions = document.querySelectorAll('#positionGrid button:not(:disabled)');
+            const firstAvailable = Array.from(positions).find(btn => !btn.disabled);
+            
+            if (firstAvailable) {
+                firstAvailable.click();
+                showNotification('เลือกตำแหน่งว่างอัตโนมัติแล้ว', 'success');
+            } else {
+                showNotification('ไม่มีตำแหน่งว่างในโซนนี้', 'error');
+            }
+        }
+
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
             notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white font-medium transform transition-all duration-300 translate-x-full`;
@@ -2731,5 +2758,5 @@
             }, 3000);
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f653b291637b6e',t:'MTc1NzkyMDQ2NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f662dd006537db',t:'MTc1NzkyMTA4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
