@@ -38,6 +38,73 @@
             justify-content: center;
             background: #f9f9f9;
         }
+        
+        /* Enhanced Toast Animations */
+        .toast {
+            animation: slideInRight 0.3s ease-out;
+        }
+        .toast.removing {
+            animation: slideOutRight 0.3s ease-in;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Card View for Mobile Tables */
+        .mobile-card {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .desktop-table {
+                display: none;
+            }
+            .mobile-card {
+                display: block;
+            }
+        }
+        
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
         @media print {
             .no-print { display: none !important; }
             .sticker { margin: 5px; }
@@ -149,12 +216,14 @@
                         <button onclick="showAddForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
                             <i class="fas fa-plus mr-1 sm:mr-2"></i>เพิ่มสินค้าใหม่
                         </button>
-                        <button onclick="exportData()" class="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
-                            <i class="fas fa-download mr-1 sm:mr-2"></i>Export Excel
+                        <button onclick="exportData()" id="exportBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base flex items-center">
+                            <div id="exportSpinner" class="spinner mr-2 hidden"></div>
+                            <i id="exportIcon" class="fas fa-download mr-1 sm:mr-2"></i>Export Excel
                         </button>
                         <input type="file" id="importFile" accept=".xlsx,.xls" onchange="importData()" class="hidden">
-                        <button onclick="document.getElementById('importFile').click()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
-                            <i class="fas fa-upload mr-1 sm:mr-2"></i>Import
+                        <button onclick="document.getElementById('importFile').click()" id="importBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base flex items-center">
+                            <div id="importSpinner" class="spinner mr-2 hidden"></div>
+                            <i id="importIcon" class="fas fa-upload mr-1 sm:mr-2"></i>Import
                         </button>
                     </div>
                 </div>
@@ -169,8 +238,8 @@
                     </div>
                 </div>
 
-                <!-- Items Table -->
-                <div class="overflow-x-auto">
+                <!-- Desktop Table -->
+                <div class="desktop-table overflow-x-auto">
                     <table class="w-full table-auto">
                         <thead class="bg-gray-50">
                             <tr>
@@ -187,6 +256,11 @@
                             <!-- Items will be populated here -->
                         </tbody>
                     </table>
+                </div>
+                
+                <!-- Mobile Card View -->
+                <div id="itemsCardContainer" class="mobile-card space-y-4">
+                    <!-- Mobile cards will be populated here -->
                 </div>
             </div>
         </div>
@@ -322,6 +396,26 @@
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
+                                
+                                <!-- Manual QR Input Fallback -->
+                                <div id="qrFallbackSection" class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg hidden">
+                                    <div class="text-center mb-3">
+                                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                        <span class="text-yellow-800 font-medium">ไม่สามารถใช้กล้องได้</span>
+                                    </div>
+                                    <div class="text-sm text-yellow-700 mb-3 text-center">
+                                        กรุณากรอก QR Code หรือ Job No. ด้วยตนเอง
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="manualQrInput" placeholder="พิมพ์ QR Code หรือ Job No." 
+                                               class="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                                               onkeypress="if(event.key==='Enter') submitManualQR()">
+                                        <button onclick="submitManualQR()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                            <i class="fas fa-check mr-2"></i>ตกลง
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <div id="scanResult" class="mt-4 p-3 bg-green-100 text-green-800 rounded-lg hidden">
                                     <i class="fas fa-check-circle mr-2"></i>
                                     <span id="scanResultText"></span>
@@ -572,6 +666,26 @@
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
+                                
+                                <!-- Manual QR Input Fallback for Issue -->
+                                <div id="issueQrFallbackSection" class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg hidden">
+                                    <div class="text-center mb-3">
+                                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                        <span class="text-yellow-800 font-medium">ไม่สามารถใช้กล้องได้</span>
+                                    </div>
+                                    <div class="text-sm text-yellow-700 mb-3 text-center">
+                                        กรุณากรอก QR Code หรือ Job No. ด้วยตนเอง
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="issueManualQrInput" placeholder="พิมพ์ QR Code หรือ Job No." 
+                                               class="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                                               onkeypress="if(event.key==='Enter') submitIssueManualQR()">
+                                        <button onclick="submitIssueManualQR()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                            <i class="fas fa-check mr-2"></i>ตกลง
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <div id="issueScanResult" class="mt-4 p-3 bg-green-100 text-green-800 rounded-lg hidden">
                                     <i class="fas fa-check-circle mr-2"></i>
                                     <span id="issueScanResultText"></span>
@@ -707,6 +821,30 @@
 
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab-content hidden">
+            <!-- Dashboard Header with Filters -->
+            <div class="bg-white rounded-lg card-shadow p-4 mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 lg:mb-0">
+                        <i class="fas fa-chart-bar text-purple-600 mr-2"></i>แดชบอร์ดและรายงาน
+                    </h2>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="flex items-center space-x-2">
+                            <label class="text-sm font-medium text-gray-700">ช่วงเวลา:</label>
+                            <select id="dashboardPeriod" onchange="updateDashboardPeriod()" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                                <option value="today">วันนี้</option>
+                                <option value="week">7 วันที่ผ่านมา</option>
+                                <option value="month" selected>30 วันที่ผ่านมา</option>
+                                <option value="all">ทั้งหมด</option>
+                            </select>
+                        </div>
+                        <button onclick="refreshDashboard()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center">
+                            <div id="dashboardSpinner" class="spinner mr-2 hidden"></div>
+                            <i id="dashboardRefreshIcon" class="fas fa-sync-alt mr-2"></i>รีเฟรช
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Summary Cards -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
                 <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
@@ -811,6 +949,24 @@
                             คลิกที่โซนเพื่อดูรายละเอียดและกรองข้อมูล
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Stock Trend Chart -->
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6 mb-6 sm:mb-8">
+                <div class="flex justify-between items-center mb-4 sm:mb-6">
+                    <h3 class="text-base sm:text-lg font-bold text-gray-800">
+                        <i class="fas fa-chart-line text-green-600 mr-2"></i>แนวโน้มสต็อกเข้า-ออกรายวัน
+                    </h3>
+                    <div class="flex items-center space-x-2">
+                        <div id="trendUpdateIndicator" class="w-2 h-2 bg-green-400 rounded-full animate-pulse hidden"></div>
+                        <button onclick="refreshTrendChart()" class="text-blue-600 hover:text-blue-800 transition-colors">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="stockTrendChart" width="800" height="300"></canvas>
                 </div>
             </div>
 
@@ -1239,7 +1395,9 @@
 
         function renderItems() {
             const tbody = document.getElementById('itemsTableBody');
+            const cardContainer = document.getElementById('itemsCardContainer');
             tbody.innerHTML = '';
+            cardContainer.innerHTML = '';
             
             if (items.length === 0) {
                 tbody.innerHTML = `
@@ -1250,10 +1408,17 @@
                         </td>
                     </tr>
                 `;
+                cardContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-box-open text-4xl mb-2 opacity-50"></i>
+                        <div>ยังไม่มีข้อมูลสินค้า</div>
+                    </div>
+                `;
                 return;
             }
             
             items.forEach((item, index) => {
+                // Desktop table row
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50 transition-colors';
                 row.innerHTML = `
@@ -1275,6 +1440,45 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+                
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow';
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            <div class="font-medium text-blue-600 text-lg">${item.jobNo}</div>
+                            <div class="text-sm text-gray-600">${formatDate(item.date)}</div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editItem(${index})" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteItem(${index})" class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-500">รหัสสินค้า:</span>
+                            <span class="text-sm font-medium">${item.productCode}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-500">ชื่อสินค้า:</span>
+                            <span class="text-sm font-medium">${item.productName}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-500">ลูกค้า:</span>
+                            <span class="text-sm font-medium">${item.customerName}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-500">จำนวนผลิต:</span>
+                            <span class="text-sm font-medium text-green-600">${Number(item.quantity).toLocaleString()}</span>
+                        </div>
+                    </div>
+                `;
+                cardContainer.appendChild(card);
             });
         }
 
@@ -1375,12 +1579,18 @@
         
         function openAndStartQRScanner() {
             document.getElementById('qrScannerModal').classList.remove('hidden');
-            setTimeout(startCameraScanning, 300); // เปิดกล้องอัตโนมัติ
+            // Auto-start camera immediately
+            setTimeout(() => {
+                startCameraScanning();
+            }, 100);
         }
 
         function closeQRScanner() {
             stopCameraScanning();
             document.getElementById('qrScannerModal').classList.add('hidden');
+            // Reset fallback input
+            document.getElementById('manualQrInput').value = '';
+            document.getElementById('qrFallbackSection').classList.add('hidden');
         }
 
         function startCameraScanning() {
@@ -1393,14 +1603,15 @@
                 'stopScanBtn',
                 'scanResult',
                 'scanResultText',
-                handleQRScanResult
+                handleQRScanResult,
+                showQRFallback // Add fallback callback
             );
         }
 
         function stopCameraScanning() {
             stopQRScannerGeneric();
             // Reset UI elements
-            document.getElementById('startScanBtn').classList.remove('hidden');
+            document.getElementById('startScanBtn').classList.add('hidden');
             document.getElementById('stopScanBtn').classList.add('hidden');
             document.getElementById('qrVideo').classList.add('hidden');
             document.getElementById('scannerOverlay').classList.add('hidden');
@@ -1416,7 +1627,22 @@
             setTimeout(() => closeQRScanner(), 500);
         }
 
-        async function startQRScannerGeneric(videoId, canvasId, placeholderId, overlayId, startBtnId, stopBtnId, resultId, resultTextId, onResult) {
+        function showQRFallback() {
+            // Show manual input fallback when camera fails
+            document.getElementById('qrFallbackSection').classList.remove('hidden');
+            document.getElementById('manualQrInput').focus();
+        }
+
+        function submitManualQR() {
+            const manualInput = document.getElementById('manualQrInput').value.trim();
+            if (manualInput) {
+                handleQRScanResult(manualInput);
+            } else {
+                showNotification('กรุณากรอก QR Code', 'error');
+            }
+        }
+
+        async function startQRScannerGeneric(videoId, canvasId, placeholderId, overlayId, startBtnId, stopBtnId, resultId, resultTextId, onResult, onFallback) {
             try {
                 // Check if camera is available
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1426,13 +1652,20 @@
                 // Check if running on HTTPS or localhost
                 const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
                 if (!isSecure) {
-                    showNotification('กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น', 'error');
-                    return;
+                    throw new Error('Camera requires HTTPS or localhost');
                 }
 
                 const video = document.getElementById(videoId);
                 const canvas = document.getElementById(canvasId);
                 const context = canvas.getContext('2d');
+                
+                // Show loading state
+                document.getElementById(placeholderId).innerHTML = `
+                    <div class="text-center text-gray-500 flex flex-col items-center justify-center h-64">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                        <p>กำลังเปิดกล้อง...</p>
+                    </div>
+                `;
                 
                 // Request camera access with fallback options
                 try {
@@ -1487,6 +1720,14 @@
                 
             } catch (error) {
                 console.error('Error accessing camera:', error);
+                
+                // Reset placeholder to original state
+                document.getElementById(placeholderId).innerHTML = `
+                    <i class="fas fa-qrcode text-4xl mb-2"></i>
+                    <p>ไม่สามารถเปิดกล้องได้</p>
+                `;
+                document.getElementById(placeholderId).classList.remove('hidden');
+                
                 let errorMessage = 'ไม่สามารถเข้าถึงกล้องได้';
                 
                 if (error.name === 'NotAllowedError') {
@@ -1495,11 +1736,18 @@
                     errorMessage = 'ไม่พบกล้องในอุปกรณ์นี้';
                 } else if (error.name === 'NotSupportedError') {
                     errorMessage = 'เบราว์เซอร์ไม่รองรับการใช้งานกล้อง';
-                } else if (error.message.includes('HTTPS')) {
+                } else if (error.message.includes('HTTPS') || error.message.includes('localhost')) {
                     errorMessage = 'กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น';
                 }
                 
                 showNotification(errorMessage, 'error');
+                
+                // Show fallback input if callback provided
+                if (onFallback && typeof onFallback === 'function') {
+                    setTimeout(() => {
+                        onFallback();
+                    }, 1000);
+                }
             }
         }
 
@@ -1714,15 +1962,43 @@
         }
 
         function checkPositionOccupied(position) {
-            // Check if position has any remaining stock
-            const positionStock = receiveHistory
-                .filter(r => r.storageArea === position)
-                .reduce((total, r) => {
-                    const issued = issueHistory
-                        .filter(i => i.jobNo === r.jobNo)
-                        .reduce((sum, i) => sum + i.issueQuantity, 0);
-                    return total + (r.receiveQuantity - issued);
-                }, 0);
+            // Get all receives in this position
+            const positionReceives = receiveHistory.filter(r => r.storageArea === position);
+            
+            // Calculate remaining stock using the same logic as heatmap
+            let positionStock = 0;
+            const jobsInPosition = new Set();
+            
+            positionReceives.forEach(receive => {
+                const jobNo = receive.jobNo;
+                jobsInPosition.add(jobNo);
+                
+                // Calculate total received for this job across all zones
+                const totalJobReceived = receiveHistory
+                    .filter(r => r.jobNo === jobNo)
+                    .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                
+                // Calculate total issued for this job across all zones
+                const totalJobIssued = issueHistory
+                    .filter(i => i.jobNo === jobNo)
+                    .reduce((sum, i) => sum + (i.issueQuantity || 0), 0);
+                
+                // Calculate remaining stock for this job
+                const jobRemainingStock = Math.max(0, totalJobReceived - totalJobIssued);
+                
+                // If this job has remaining stock, add proportional amount to position stock
+                if (jobRemainingStock > 0) {
+                    const jobReceivedInPosition = receiveHistory
+                        .filter(r => r.jobNo === jobNo && r.storageArea === position)
+                        .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                    
+                    if (jobReceivedInPosition > 0 && totalJobReceived > 0) {
+                        // Proportional allocation of remaining stock to this position
+                        const positionRatio = jobReceivedInPosition / totalJobReceived;
+                        positionStock += Math.floor(jobRemainingStock * positionRatio);
+                    }
+                }
+            });
             
             return positionStock > 0;
         }
@@ -1990,12 +2266,18 @@
 
         function openAndStartIssueQRScanner() {
             document.getElementById('issueQrScannerModal').classList.remove('hidden');
-            setTimeout(startIssueCameraScanning, 300); // เปิดกล้องอัตโนมัติ
+            // Auto-start camera immediately
+            setTimeout(() => {
+                startIssueCameraScanning();
+            }, 100);
         }
 
         function closeIssueQRScanner() {
             stopIssueCameraScanning();
             document.getElementById('issueQrScannerModal').classList.add('hidden');
+            // Reset fallback input
+            document.getElementById('issueManualQrInput').value = '';
+            document.getElementById('issueQrFallbackSection').classList.add('hidden');
         }
 
         function startIssueCameraScanning() {
@@ -2008,14 +2290,15 @@
                 'issueStopScanBtn',
                 'issueScanResult',
                 'issueScanResultText',
-                handleIssueQRScanResult
+                handleIssueQRScanResult,
+                showIssueQRFallback // Add fallback callback
             );
         }
 
         function stopIssueCameraScanning() {
             stopQRScannerGeneric();
             // Reset UI elements
-            document.getElementById('issueStartScanBtn').classList.remove('hidden');
+            document.getElementById('issueStartScanBtn').classList.add('hidden');
             document.getElementById('issueStopScanBtn').classList.add('hidden');
             document.getElementById('issueQrVideo').classList.add('hidden');
             document.getElementById('issueScannerOverlay').classList.add('hidden');
@@ -2029,6 +2312,21 @@
             document.getElementById('issueQrInput').value = qrData;
             searchIssueJobByQR();
             setTimeout(() => closeIssueQRScanner(), 500);
+        }
+
+        function showIssueQRFallback() {
+            // Show manual input fallback when camera fails
+            document.getElementById('issueQrFallbackSection').classList.remove('hidden');
+            document.getElementById('issueManualQrInput').focus();
+        }
+
+        function submitIssueManualQR() {
+            const manualInput = document.getElementById('issueManualQrInput').value.trim();
+            if (manualInput) {
+                handleIssueQRScanResult(manualInput);
+            } else {
+                showNotification('กรุณากรอก QR Code', 'error');
+            }
         }
 
         function loadIssueJobData() {
@@ -2395,31 +2693,42 @@
                 return;
             }
             
-            const headers = ['วันที่', 'MC', 'Job No.', 'กำหนดส่งสินค้า', 'OE', 'รหัสสินค้า', 'ชื่อสินค้า', 'ขนาด', 'สี', 'รหัสลูกค้า', 'ชื่อลูกค้า', 'โลโก้', 'วัสดุประกอบ', 'รหัสฝาประกอบ', 'จำนวนผลิต', 'บรรจุ/ถุง', 'จำนวนถุง', 'เศษ'];
+            // Show loading state
+            showLoadingState('export');
             
-            const data = items.map(item => [
-                item.date || '', item.mc || '', item.jobNo || '', item.deliveryDate || '', item.oe || '',
-                item.productCode || '', item.productName || '', item.size || '', item.color || '',
-                item.customerCode || '', item.customerName || '', item.logo || '', item.material || '',
-                item.lidCode || '', item.quantity || '', item.packPerBag || '', item.bagCount || '', item.remainder || ''
-            ]);
-            
-            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Items');
-            
-            // Auto-size columns
-            const colWidths = headers.map((_, i) => {
-                const maxLength = Math.max(
-                    headers[i].length,
-                    ...data.map(row => String(row[i] || '').length)
-                );
-                return { wch: Math.min(maxLength + 2, 30) };
-            });
-            ws['!cols'] = colWidths;
-            
-            XLSX.writeFile(wb, `warehouse-items-${new Date().toISOString().split('T')[0]}.xlsx`);
-            showNotification('Export Excel เรียบร้อยแล้ว', 'success');
+            setTimeout(() => {
+                try {
+                    const headers = ['วันที่', 'MC', 'Job No.', 'กำหนดส่งสินค้า', 'OE', 'รหัสสินค้า', 'ชื่อสินค้า', 'ขนาด', 'สี', 'รหัสลูกค้า', 'ชื่อลูกค้า', 'โลโก้', 'วัสดุประกอบ', 'รหัสฝาประกอบ', 'จำนวนผลิต', 'บรรจุ/ถุง', 'จำนวนถุง', 'เศษ'];
+                    
+                    const data = items.map(item => [
+                        item.date || '', item.mc || '', item.jobNo || '', item.deliveryDate || '', item.oe || '',
+                        item.productCode || '', item.productName || '', item.size || '', item.color || '',
+                        item.customerCode || '', item.customerName || '', item.logo || '', item.material || '',
+                        item.lidCode || '', item.quantity || '', item.packPerBag || '', item.bagCount || '', item.remainder || ''
+                    ]);
+                    
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Items');
+                    
+                    // Auto-size columns
+                    const colWidths = headers.map((_, i) => {
+                        const maxLength = Math.max(
+                            headers[i].length,
+                            ...data.map(row => String(row[i] || '').length)
+                        );
+                        return { wch: Math.min(maxLength + 2, 30) };
+                    });
+                    ws['!cols'] = colWidths;
+                    
+                    XLSX.writeFile(wb, `warehouse-items-${new Date().toISOString().split('T')[0]}.xlsx`);
+                    showNotification('Export Excel เรียบร้อยแล้ว', 'success');
+                } catch (error) {
+                    showNotification('เกิดข้อผิดพลาดในการ Export', 'error');
+                } finally {
+                    hideLoadingState('export');
+                }
+            }, 500);
         }
 
         function importData() {
@@ -2512,6 +2821,7 @@
             calculateInventoryData();
             updateSummaryCards();
             renderTopStockChart();
+            renderStockTrendChart();
             renderRealTimeHeatmap();
             renderInventoryTable();
         }
@@ -2556,20 +2866,36 @@
                 // Calculate total received for this job
                 const totalReceived = receiveHistory
                     .filter(r => r.jobNo === jobNo)
-                    .reduce((sum, r) => sum + r.receiveQuantity, 0);
+                    .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
                 
                 // Calculate total issued for this job
                 const totalIssued = issueHistory
                     .filter(i => i.jobNo === jobNo)
-                    .reduce((sum, i) => sum + i.issueQuantity, 0);
+                    .reduce((sum, i) => sum + (i.issueQuantity || 0), 0);
                 
-                // Get storage zones for this job
-                const storageZones = receiveHistory
-                    .filter(r => r.jobNo === jobNo)
-                    .map(r => r.storageArea)
-                    .filter((zone, index, arr) => arr.indexOf(zone) === index);
+                // Get storage zones for this job (only zones with remaining stock)
+                const jobReceives = receiveHistory.filter(r => r.jobNo === jobNo);
+                const storageZones = [];
                 
-                const remainingStock = totalReceived - totalIssued;
+                jobReceives.forEach(receive => {
+                    if (receive.storageArea) {
+                        // Calculate remaining stock in this specific zone for this job
+                        const zoneReceived = receiveHistory
+                            .filter(r => r.jobNo === jobNo && r.storageArea === receive.storageArea)
+                            .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                        
+                        const zoneIssued = issueHistory
+                            .filter(i => i.jobNo === jobNo)
+                            .reduce((sum, i) => sum + (i.issueQuantity || 0), 0);
+                        
+                        // Only include zone if it has remaining stock
+                        if (zoneReceived > 0 && !storageZones.includes(receive.storageArea)) {
+                            storageZones.push(receive.storageArea);
+                        }
+                    }
+                });
+                
+                const remainingStock = Math.max(0, totalReceived - totalIssued);
                 
                 inventoryData.push({
                     jobNo: jobNo,
@@ -2712,23 +3038,54 @@
             
             const zones = ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'D5'];
             
-            // Calculate max stock across all zones for better color scaling
+            // Calculate stock for each zone using the same logic as inventory calculation
             let maxZoneStock = 0;
             const zoneData = zones.map(zone => {
-                const zoneItems = receiveHistory.filter(r => r.storageArea === zone);
-                const zoneStock = zoneItems.reduce((sum, r) => {
-                    const issued = issueHistory
-                        .filter(i => i.jobNo === r.jobNo)
-                        .reduce((sum, i) => sum + i.issueQuantity, 0);
-                    return sum + (r.receiveQuantity - issued);
-                }, 0);
+                // Get all receives in this zone
+                const zoneReceives = receiveHistory.filter(r => r.storageArea === zone);
+                
+                // Calculate remaining stock per job in this zone
+                let zoneStock = 0;
+                const jobsInZone = new Set();
+                
+                zoneReceives.forEach(receive => {
+                    const jobNo = receive.jobNo;
+                    jobsInZone.add(jobNo);
+                    
+                    // Calculate total received for this job across all zones
+                    const totalJobReceived = receiveHistory
+                        .filter(r => r.jobNo === jobNo)
+                        .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                    
+                    // Calculate total issued for this job across all zones
+                    const totalJobIssued = issueHistory
+                        .filter(i => i.jobNo === jobNo)
+                        .reduce((sum, i) => sum + (i.issueQuantity || 0), 0);
+                    
+                    // Calculate remaining stock for this job
+                    const jobRemainingStock = Math.max(0, totalJobReceived - totalJobIssued);
+                    
+                    // If this job has remaining stock, add it to zone stock
+                    // (assuming remaining stock is distributed proportionally across zones)
+                    if (jobRemainingStock > 0) {
+                        const jobReceivedInZone = receiveHistory
+                            .filter(r => r.jobNo === jobNo && r.storageArea === zone)
+                            .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                        
+                        if (jobReceivedInZone > 0 && totalJobReceived > 0) {
+                            // Proportional allocation of remaining stock to this zone
+                            const zoneRatio = jobReceivedInZone / totalJobReceived;
+                            zoneStock += Math.floor(jobRemainingStock * zoneRatio);
+                        }
+                    }
+                });
                 
                 maxZoneStock = Math.max(maxZoneStock, zoneStock);
                 
                 return {
                     zone: zone,
                     stock: zoneStock,
-                    jobs: [...new Set(zoneItems.map(r => r.jobNo))].length
+                    jobs: jobsInZone.size
                 };
             });
             
@@ -2741,7 +3098,7 @@
                 // Enhanced color scheme with more granular levels
                 let bgColor, textColor, borderColor, intensity;
                 
-                if (utilization === 0) {
+                if (stock === 0) {
                     bgColor = 'bg-gray-100';
                     textColor = 'text-gray-600';
                     borderColor = 'border-gray-300';
@@ -3044,35 +3401,290 @@
             }[type] || "fa-bell";
             
             const toast = document.createElement("div");
-            toast.className = `toast ${bg} text-white px-4 py-3 rounded-xl shadow-lg transform translate-x-full transition-all duration-300 flex items-center space-x-2 min-w-64`;
+            toast.className = `toast ${bg} text-white px-4 py-3 rounded-xl shadow-lg flex items-center space-x-3 min-w-64 max-w-sm`;
             toast.innerHTML = `
-                <i class="fas ${icon}"></i>
-                <span class="font-medium">${message}</span>
+                <div class="flex-shrink-0">
+                    <i class="fas ${icon} text-lg"></i>
+                </div>
+                <div class="flex-1">
+                    <span class="font-medium text-sm">${message}</span>
+                </div>
+                <button onclick="this.parentElement.remove()" class="flex-shrink-0 text-white hover:text-gray-200 transition-colors">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
             `;
             
             container.appendChild(toast);
             
-            // Slide in animation
+            // Enhanced fade-in animation with bounce effect
             setTimeout(() => {
-                toast.classList.remove("translate-x-full");
-                toast.classList.add("translate-x-0");
+                toast.style.transform = 'translateX(0) scale(1.05)';
+                toast.style.opacity = '1';
+                
+                setTimeout(() => {
+                    toast.style.transform = 'translateX(0) scale(1)';
+                }, 150);
             }, 50);
             
-            // Auto remove after 3 seconds
+            // Auto remove after 4 seconds with enhanced fade-out
             setTimeout(() => {
-                toast.classList.add("translate-x-full");
+                toast.classList.add('removing');
                 setTimeout(() => {
                     if (toast.parentNode) {
                         toast.remove();
                     }
                 }, 300);
-            }, 3000);
+            }, 4000);
         }
 
+        // Loading State Functions
+        function showLoadingState(type) {
+            const spinner = document.getElementById(`${type}Spinner`);
+            const icon = document.getElementById(`${type}Icon`);
+            const btn = document.getElementById(`${type}Btn`);
+            
+            if (spinner && icon && btn) {
+                spinner.classList.remove('hidden');
+                icon.classList.add('hidden');
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+            }
+        }
+        
+        function hideLoadingState(type) {
+            const spinner = document.getElementById(`${type}Spinner`);
+            const icon = document.getElementById(`${type}Icon`);
+            const btn = document.getElementById(`${type}Btn`);
+            
+            if (spinner && icon && btn) {
+                spinner.classList.add('hidden');
+                icon.classList.remove('hidden');
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+        
+        // Dashboard Period Filter
+        let currentDashboardPeriod = 'month';
+        
+        function updateDashboardPeriod() {
+            currentDashboardPeriod = document.getElementById('dashboardPeriod').value;
+            showLoadingState('dashboard');
+            
+            setTimeout(() => {
+                updateDashboard();
+                hideLoadingState('dashboard');
+                showNotification(`อัปเดตข้อมูลช่วง${getPeriodText(currentDashboardPeriod)}แล้ว`, 'success');
+            }, 800);
+        }
+        
+        function getPeriodText(period) {
+            const texts = {
+                'today': 'วันนี้',
+                'week': '7 วันที่ผ่านมา',
+                'month': '30 วันที่ผ่านมา',
+                'all': 'ทั้งหมด'
+            };
+            return texts[period] || 'ทั้งหมด';
+        }
+        
+        function getDateFilter(period) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            switch (period) {
+                case 'today':
+                    return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+                case 'week':
+                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return { start: weekAgo, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+                case 'month':
+                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    return { start: monthAgo, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+                case 'all':
+                default:
+                    return { start: new Date(2020, 0, 1), end: new Date(2030, 11, 31) };
+            }
+        }
+        
+        function refreshDashboard() {
+            showLoadingState('dashboard');
+            
+            setTimeout(() => {
+                updateDashboard();
+                hideLoadingState('dashboard');
+                showNotification('รีเฟรชแดชบอร์ดเรียบร้อยแล้ว', 'success');
+            }, 1000);
+        }
+        
+        function refreshTrendChart() {
+            document.getElementById('trendUpdateIndicator').classList.remove('hidden');
+            
+            setTimeout(() => {
+                renderStockTrendChart();
+                document.getElementById('trendUpdateIndicator').classList.add('hidden');
+                showNotification('รีเฟรชกราฟแนวโน้มเรียบร้อยแล้ว', 'success');
+            }, 800);
+        }
+        
+        // Stock Trend Chart Function
+        function renderStockTrendChart() {
+            const canvas = document.getElementById('stockTrendChart');
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Get date filter
+            const dateFilter = getDateFilter(currentDashboardPeriod);
+            
+            // Prepare data for the last 30 days (or filtered period)
+            const days = [];
+            const receiveData = [];
+            const issueData = [];
+            
+            // Generate date range
+            const dayCount = currentDashboardPeriod === 'today' ? 1 : 
+                           currentDashboardPeriod === 'week' ? 7 : 
+                           currentDashboardPeriod === 'month' ? 30 : 30;
+            
+            for (let i = dayCount - 1; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                days.push(date.toLocaleDateString('th-TH', { month: 'short', day: 'numeric' }));
+                
+                // Calculate daily receive
+                const dailyReceive = receiveHistory
+                    .filter(r => r.receiveDate === dateStr)
+                    .reduce((sum, r) => sum + (r.receiveQuantity || 0), 0);
+                receiveData.push(dailyReceive);
+                
+                // Calculate daily issue
+                const dailyIssue = issueHistory
+                    .filter(i => i.issueDate === dateStr)
+                    .reduce((sum, i) => sum + (i.issueQuantity || 0), 0);
+                issueData.push(dailyIssue);
+            }
+            
+            if (receiveData.every(val => val === 0) && issueData.every(val => val === 0)) {
+                ctx.fillStyle = '#9CA3AF';
+                ctx.font = '16px Kanit';
+                ctx.textAlign = 'center';
+                ctx.fillText('ไม่มีข้อมูลในช่วงเวลานี้', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
+            const maxValue = Math.max(...receiveData, ...issueData, 100);
+            const chartWidth = canvas.width - 100;
+            const chartHeight = canvas.height - 80;
+            const stepX = chartWidth / (days.length - 1);
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#E5E7EB';
+            ctx.lineWidth = 1;
+            
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const y = 40 + (chartHeight / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(60, y);
+                ctx.lineTo(60 + chartWidth, y);
+                ctx.stroke();
+                
+                // Y-axis labels
+                ctx.fillStyle = '#6B7280';
+                ctx.font = '12px Kanit';
+                ctx.textAlign = 'right';
+                const value = Math.round(maxValue - (maxValue / 5) * i);
+                ctx.fillText(value.toLocaleString(), 55, y + 4);
+            }
+            
+            // Draw receive line (green)
+            ctx.strokeStyle = '#10B981';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            receiveData.forEach((value, index) => {
+                const x = 60 + index * stepX;
+                const y = 40 + chartHeight - (value / maxValue) * chartHeight;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+            
+            // Draw receive points
+            ctx.fillStyle = '#10B981';
+            receiveData.forEach((value, index) => {
+                const x = 60 + index * stepX;
+                const y = 40 + chartHeight - (value / maxValue) * chartHeight;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            // Draw issue line (red)
+            ctx.strokeStyle = '#EF4444';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            issueData.forEach((value, index) => {
+                const x = 60 + index * stepX;
+                const y = 40 + chartHeight - (value / maxValue) * chartHeight;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+            
+            // Draw issue points
+            ctx.fillStyle = '#EF4444';
+            issueData.forEach((value, index) => {
+                const x = 60 + index * stepX;
+                const y = 40 + chartHeight - (value / maxValue) * chartHeight;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            // Draw X-axis labels
+            ctx.fillStyle = '#6B7280';
+            ctx.font = '11px Kanit';
+            ctx.textAlign = 'center';
+            days.forEach((day, index) => {
+                if (index % Math.ceil(days.length / 8) === 0) { // Show every nth label to avoid crowding
+                    const x = 60 + index * stepX;
+                    ctx.fillText(day, x, chartHeight + 60);
+                }
+            });
+            
+            // Draw legend
+            ctx.fillStyle = '#10B981';
+            ctx.fillRect(chartWidth - 150, 15, 15, 15);
+            ctx.fillStyle = '#374151';
+            ctx.font = '12px Kanit';
+            ctx.textAlign = 'left';
+            ctx.fillText('รับเข้า', chartWidth - 130, 27);
+            
+            ctx.fillStyle = '#EF4444';
+            ctx.fillRect(chartWidth - 60, 15, 15, 15);
+            ctx.fillStyle = '#374151';
+            ctx.fillText('จ่ายออก', chartWidth - 40, 27);
+            
+            // Title
+            ctx.fillStyle = '#1F2937';
+            ctx.font = 'bold 14px Kanit';
+            ctx.textAlign = 'center';
+            ctx.fillText(`📈 แนวโน้มสต็อก${getPeriodText(currentDashboardPeriod)}`, canvas.width / 2, 20);
+        }
+        
         // Alias for backward compatibility
         function showNotification(message, type = 'info') {
             showToast(message, type);
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f68fb036abd32c',t:'MTc1NzkyMjkyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f72f44541ad32d',t:'MTc1NzkyOTQ1Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
