@@ -220,7 +220,7 @@
                                 <input type="text" id="qrInput" placeholder="สแกน QR Code หรือพิมพ์ Job No." 
                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                        oninput="searchJobByQR()">
-                                <button onclick="startQRScanner()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                <button onclick="openAndStartQRScanner()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
                                     <i class="fas fa-camera mr-2"></i>สแกน QR
                                 </button>
                             </div>
@@ -433,7 +433,7 @@
                                 <input type="text" id="issueQrInput" placeholder="สแกน QR Code หรือพิมพ์ Job No." 
                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                        oninput="searchIssueJobByQR()">
-                                <button onclick="startIssueQRScanner()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                <button onclick="openAndStartIssueQRScanner()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
                                     <i class="fas fa-camera mr-2"></i>สแกน QR
                                 </button>
                             </div>
@@ -1207,6 +1207,12 @@
             }
         }
 
+        function openAndStartQRScanner() {
+            document.getElementById('qrScannerModal').classList.remove('hidden');
+            // เรียกสแกนกล้องทันที
+            setTimeout(startCameraScanning, 300);
+        }
+
         function startQRScanner() {
             document.getElementById('qrScannerModal').classList.remove('hidden');
         }
@@ -1218,18 +1224,40 @@
 
         async function startCameraScanning() {
             try {
+                // Check if camera is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera not supported on this device');
+                }
+
+                // Check if running on HTTPS or localhost
+                const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+                if (!isSecure) {
+                    showNotification('กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น', 'error');
+                    return;
+                }
+
                 const video = document.getElementById('qrVideo');
                 const canvas = document.getElementById('qrCanvas');
                 const context = canvas.getContext('2d');
                 
-                // Request camera access
-                currentStream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: 'environment', // Use back camera on mobile
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
+                // Request camera access with fallback options
+                try {
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            facingMode: 'environment', // Use back camera on mobile
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+                } catch (envError) {
+                    // Fallback to any available camera
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
+                    });
+                }
                 
                 video.srcObject = currentStream;
                 video.play();
@@ -1265,7 +1293,19 @@
                 
             } catch (error) {
                 console.error('Error accessing camera:', error);
-                showNotification('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้งานกล้อง', 'error');
+                let errorMessage = 'ไม่สามารถเข้าถึงกล้องได้';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'ไม่พบกล้องในอุปกรณ์นี้';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = 'เบราว์เซอร์ไม่รองรับการใช้งานกล้อง';
+                } else if (error.message.includes('HTTPS')) {
+                    errorMessage = 'กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น';
+                }
+                
+                showNotification(errorMessage, 'error');
             }
         }
 
@@ -1716,6 +1756,12 @@
             }
         }
 
+        function openAndStartIssueQRScanner() {
+            document.getElementById('issueQrScannerModal').classList.remove('hidden');
+            // เรียกสแกนกล้องทันที
+            setTimeout(startIssueCameraScanning, 300);
+        }
+
         function startIssueQRScanner() {
             document.getElementById('issueQrScannerModal').classList.remove('hidden');
         }
@@ -1727,18 +1773,40 @@
 
         async function startIssueCameraScanning() {
             try {
+                // Check if camera is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera not supported on this device');
+                }
+
+                // Check if running on HTTPS or localhost
+                const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+                if (!isSecure) {
+                    showNotification('กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น', 'error');
+                    return;
+                }
+
                 const video = document.getElementById('issueQrVideo');
                 const canvas = document.getElementById('issueQrCanvas');
                 const context = canvas.getContext('2d');
                 
-                // Request camera access
-                currentStream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: 'environment', // Use back camera on mobile
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
+                // Request camera access with fallback options
+                try {
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            facingMode: 'environment', // Use back camera on mobile
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+                } catch (envError) {
+                    // Fallback to any available camera
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
+                    });
+                }
                 
                 video.srcObject = currentStream;
                 video.play();
@@ -1774,7 +1842,19 @@
                 
             } catch (error) {
                 console.error('Error accessing camera:', error);
-                showNotification('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้งานกล้อง', 'error');
+                let errorMessage = 'ไม่สามารถเข้าถึงกล้องได้';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'ไม่พบกล้องในอุปกรณ์นี้';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage = 'เบราว์เซอร์ไม่รองรับการใช้งานกล้อง';
+                } else if (error.message.includes('HTTPS')) {
+                    errorMessage = 'กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น';
+                }
+                
+                showNotification(errorMessage, 'error');
             }
         }
 
@@ -2651,5 +2731,5 @@
             }, 3000);
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f62fdb6322d33a',t:'MTc1NzkxODk5Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f653b291637b6e',t:'MTc1NzkyMDQ2NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
