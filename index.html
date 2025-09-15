@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
@@ -62,46 +63,95 @@
 
     <!-- Navigation -->
     <nav class="bg-white shadow-md sticky top-0 z-40">
-        <div class="container mx-auto px-4">
-            <div class="flex space-x-8 overflow-x-auto">
-                <button onclick="showTab('itemMaster')" id="tab-itemMaster" class="tab-btn py-4 px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap">
-                    <i class="fas fa-box mr-2"></i>Item Master
+        <div class="container mx-auto px-2 sm:px-4">
+            <!-- Mobile Menu Button -->
+            <div class="flex justify-between items-center md:hidden py-3">
+                <h2 id="currentTabTitle" class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-box mr-2 text-blue-600"></i>ข้อมูลสินค้า
+                </h2>
+                <button onclick="toggleMobileMenu()" id="mobileMenuBtn" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-bars text-xl text-gray-600"></i>
                 </button>
-                <button onclick="showTab('qrSticker')" id="tab-qrSticker" class="tab-btn py-4 px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap">
-                    <i class="fas fa-qrcode mr-2"></i>QR Sticker
+            </div>
+            
+            <!-- Desktop Navigation -->
+            <div class="hidden md:flex space-x-2 lg:space-x-4 overflow-x-auto">
+                <button onclick="showTab('itemMaster')" id="tab-itemMaster" class="tab-btn py-3 lg:py-4 px-3 lg:px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap text-sm lg:text-base">
+                    <i class="fas fa-box mr-1 lg:mr-2"></i>
+                    <span class="hidden lg:inline">ข้อมูลสินค้า</span>
+                    <span class="lg:hidden">สินค้า</span>
                 </button>
-                <button onclick="showTab('receive')" id="tab-receive" class="tab-btn py-4 px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap">
-                    <i class="fas fa-arrow-down mr-2"></i>Receive
+                <button onclick="showTab('qrSticker')" id="tab-qrSticker" class="tab-btn py-3 lg:py-4 px-3 lg:px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap text-sm lg:text-base">
+                    <i class="fas fa-qrcode mr-1 lg:mr-2"></i>
+                    <span class="hidden lg:inline">สร้างสติกเกอร์</span>
+                    <span class="lg:hidden">QR</span>
                 </button>
-                <button onclick="showTab('issue')" id="tab-issue" class="tab-btn py-4 px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap">
-                    <i class="fas fa-arrow-up mr-2"></i>Issue
+                <button onclick="showTab('receive')" id="tab-receive" class="tab-btn py-3 lg:py-4 px-3 lg:px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap text-sm lg:text-base">
+                    <i class="fas fa-arrow-down mr-1 lg:mr-2"></i>
+                    <span class="hidden lg:inline">รับเข้าสินค้า</span>
+                    <span class="lg:hidden">รับเข้า</span>
                 </button>
-                <button onclick="showTab('dashboard')" id="tab-dashboard" class="tab-btn py-4 px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap">
-                    <i class="fas fa-chart-bar mr-2"></i>Dashboard
+                <button onclick="showTab('issue')" id="tab-issue" class="tab-btn py-3 lg:py-4 px-3 lg:px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap text-sm lg:text-base">
+                    <i class="fas fa-arrow-up mr-1 lg:mr-2"></i>
+                    <span class="hidden lg:inline">จ่ายออกสินค้า</span>
+                    <span class="lg:hidden">จ่ายออก</span>
                 </button>
+                <button onclick="showTab('dashboard')" id="tab-dashboard" class="tab-btn py-3 lg:py-4 px-3 lg:px-6 border-b-2 border-transparent hover:border-blue-500 transition-colors font-medium text-gray-700 hover:text-blue-600 whitespace-nowrap text-sm lg:text-base">
+                    <i class="fas fa-chart-bar mr-1 lg:mr-2"></i>
+                    <span class="hidden lg:inline">แดชบอร์ด</span>
+                    <span class="lg:hidden">รายงาน</span>
+                </button>
+            </div>
+            
+            <!-- Mobile Navigation Menu -->
+            <div id="mobileMenu" class="md:hidden hidden bg-white border-t border-gray-200 py-2">
+                <div class="grid grid-cols-2 gap-2 px-2">
+                    <button onclick="showTab('itemMaster'); closeMobileMenu();" class="mobile-tab-btn flex flex-col items-center py-3 px-2 rounded-lg hover:bg-blue-50 transition-colors text-gray-700 hover:text-blue-600">
+                        <i class="fas fa-box text-xl mb-1"></i>
+                        <span class="text-xs font-medium">ข้อมูลสินค้า</span>
+                    </button>
+                    <button onclick="showTab('qrSticker'); closeMobileMenu();" class="mobile-tab-btn flex flex-col items-center py-3 px-2 rounded-lg hover:bg-blue-50 transition-colors text-gray-700 hover:text-blue-600">
+                        <i class="fas fa-qrcode text-xl mb-1"></i>
+                        <span class="text-xs font-medium">สร้างสติกเกอร์</span>
+                    </button>
+                    <button onclick="showTab('receive'); closeMobileMenu();" class="mobile-tab-btn flex flex-col items-center py-3 px-2 rounded-lg hover:bg-blue-50 transition-colors text-gray-700 hover:text-blue-600">
+                        <i class="fas fa-arrow-down text-xl mb-1"></i>
+                        <span class="text-xs font-medium">รับเข้าสินค้า</span>
+                    </button>
+                    <button onclick="showTab('issue'); closeMobileMenu();" class="mobile-tab-btn flex flex-col items-center py-3 px-2 rounded-lg hover:bg-blue-50 transition-colors text-gray-700 hover:text-blue-600">
+                        <i class="fas fa-arrow-up text-xl mb-1"></i>
+                        <span class="text-xs font-medium">จ่ายออกสินค้า</span>
+                    </button>
+                </div>
+                <div class="px-2 mt-2">
+                    <button onclick="showTab('dashboard'); closeMobileMenu();" class="mobile-tab-btn w-full flex items-center justify-center py-3 px-2 rounded-lg hover:bg-blue-50 transition-colors text-gray-700 hover:text-blue-600">
+                        <i class="fas fa-chart-bar text-xl mr-2"></i>
+                        <span class="text-sm font-medium">แดชบอร์ดและรายงาน</span>
+                    </button>
+                </div>
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="container mx-auto px-4 py-8">
+    <main class="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
         <!-- Item Master Tab -->
         <div id="itemMaster" class="tab-content">
-            <div class="bg-white rounded-lg card-shadow p-6 mb-6">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 lg:mb-0">
-                        <i class="fas fa-box text-blue-600 mr-3"></i>ข้อมูลสินค้า
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6 mb-4 sm:mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+                    <h2 class="text-xl sm:text-2xl font-bold text-gray-800 mb-4 lg:mb-0">
+                        <i class="fas fa-box text-blue-600 mr-2 sm:mr-3"></i>ข้อมูลสินค้า
                     </h2>
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <button onclick="showAddForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors hover-scale">
-                            <i class="fas fa-plus mr-2"></i>เพิ่มสินค้าใหม่
+                    <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                        <button onclick="showAddForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
+                            <i class="fas fa-plus mr-1 sm:mr-2"></i>เพิ่มสินค้าใหม่
                         </button>
-                        <button onclick="exportData()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors hover-scale">
-                            <i class="fas fa-download mr-2"></i>Export Excel
+                        <button onclick="exportData()" class="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
+                            <i class="fas fa-download mr-1 sm:mr-2"></i>Export Excel
                         </button>
-                        <input type="file" id="importFile" accept=".csv,.xlsx" onchange="importData()" class="hidden">
-                        <button onclick="document.getElementById('importFile').click()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition-colors hover-scale">
-                            <i class="fas fa-upload mr-2"></i>Import
+                        <input type="file" id="importFile" accept=".xlsx,.xls" onchange="importData()" class="hidden">
+                        <button onclick="document.getElementById('importFile').click()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 sm:px-6 py-2 rounded-lg transition-colors hover-scale text-sm sm:text-base">
+                            <i class="fas fa-upload mr-1 sm:mr-2"></i>Import
                         </button>
                     </div>
                 </div>
@@ -140,9 +190,9 @@
 
         <!-- QR Sticker Tab -->
         <div id="qrSticker" class="tab-content hidden">
-            <div class="bg-white rounded-lg card-shadow p-6 mb-6">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-qrcode text-blue-600 mr-3"></i>สร้างสติกเกอร์ QR Code
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6 mb-4 sm:mb-6">
+                <h2 class="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">
+                    <i class="fas fa-qrcode text-blue-600 mr-2 sm:mr-3"></i>สร้างสติกเกอร์ QR Code
                 </h2>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -164,7 +214,7 @@
                 <!-- Job Details -->
                 <div id="jobDetails" class="mt-6 p-4 bg-gray-50 rounded-lg hidden">
                     <h3 class="font-semibold text-gray-800 mb-3">รายละเอียดงาน</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                         <div><span class="font-medium">วันที่:</span> <span id="detail-date"></span></div>
                         <div><span class="font-medium">MC:</span> <span id="detail-mc"></span></div>
                         <div><span class="font-medium">กำหนดส่ง:</span> <span id="detail-delivery"></span></div>
@@ -174,6 +224,10 @@
                         <div><span class="font-medium">ขนาด:</span> <span id="detail-size"></span></div>
                         <div><span class="font-medium">สี:</span> <span id="detail-color"></span></div>
                         <div><span class="font-medium">ลูกค้า:</span> <span id="detail-customer"></span></div>
+                        <div><span class="font-medium">จำนวนผลิต:</span> <span id="detail-quantity"></span></div>
+                        <div><span class="font-medium">บรรจุ/ถุง:</span> <span id="detail-packPerBag"></span></div>
+                        <div><span class="font-medium">จำนวนถุง:</span> <span id="detail-bagCount"></span></div>
+                        <div><span class="font-medium">เศษ:</span> <span id="detail-remainder"></span></div>
                     </div>
                 </div>
 
@@ -206,9 +260,9 @@
 
         <!-- Receive Tab -->
         <div id="receive" class="tab-content hidden">
-            <div class="bg-white rounded-lg card-shadow p-6 mb-6">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-arrow-down text-green-600 mr-3"></i>รับเข้าสินค้า
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6 mb-4 sm:mb-6">
+                <h2 class="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">
+                    <i class="fas fa-arrow-down text-green-600 mr-2 sm:mr-3"></i>รับเข้าสินค้า
                 </h2>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -258,10 +312,10 @@
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
-                                    <button id="startScanBtn" onclick="startCameraScanning()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                    <button id="startScanBtn" onclick="startQRScannerGeneric('qrVideo', 'qrCanvas', 'scannerPlaceholder', 'scannerOverlay', 'startScanBtn', 'stopScanBtn', 'scanResult', 'scanResultText', (qrData) => { document.getElementById('qrInput').value = qrData; searchJobByQR(); closeQRScanner(); })" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
                                         <i class="fas fa-camera mr-2"></i>เริ่มสแกน
                                     </button>
-                                    <button id="stopScanBtn" onclick="stopCameraScanning()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
+                                    <button id="stopScanBtn" onclick="stopQRScannerGeneric(); document.getElementById('startScanBtn').classList.remove('hidden'); document.getElementById('stopScanBtn').classList.add('hidden'); document.getElementById('qrVideo').classList.add('hidden'); document.getElementById('scannerOverlay').classList.add('hidden'); document.getElementById('scannerPlaceholder').classList.remove('hidden'); document.getElementById('scanResult').classList.add('hidden');" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
@@ -277,7 +331,7 @@
                     <div>
                         <div id="receiveJobDetails" class="p-4 bg-gray-50 rounded-lg mb-6 hidden">
                             <h3 class="font-semibold text-gray-800 mb-3">รายละเอียดงาน</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                                 <div><span class="font-medium">MC:</span> <span id="receive-mc"></span></div>
                                 <div><span class="font-medium">OE:</span> <span id="receive-oe"></span></div>
                                 <div><span class="font-medium">รหัสสินค้า:</span> <span id="receive-productCode"></span></div>
@@ -286,7 +340,36 @@
                                 <div><span class="font-medium">สี:</span> <span id="receive-color"></span></div>
                                 <div><span class="font-medium">ลูกค้า:</span> <span id="receive-customerName"></span></div>
                                 <div><span class="font-medium">รหัสฝา:</span> <span id="receive-lidCode"></span></div>
+                                <div><span class="font-medium">จำนวนผลิต:</span> <span id="receive-quantity"></span></div>
                                 <div><span class="font-medium">บรรจุ/ถุง:</span> <span id="receive-packPerBag"></span></div>
+                                <div><span class="font-medium">จำนวนถุง:</span> <span id="receive-bagCount"></span></div>
+                                <div><span class="font-medium">เศษ:</span> <span id="receive-remainder"></span></div>
+                            </div>
+                            
+                            <!-- Storage Progress -->
+                            <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h4 class="font-semibold text-blue-800 mb-2">
+                                    <i class="fas fa-chart-pie mr-2"></i>สถานะการเก็บ
+                                </h4>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold text-green-600" id="receive-storedBags">0</div>
+                                        <div class="text-gray-600">เก็บแล้ว (ถุง)</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold text-orange-600" id="receive-remainingBags">0</div>
+                                        <div class="text-gray-600">ต้องเก็บเพิ่ม (ถุง)</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold text-blue-600" id="receive-progressPercent">0%</div>
+                                        <div class="text-gray-600">ความคืบหน้า</div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div id="receive-progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -382,13 +465,13 @@
             </div>
 
             <!-- Receive History -->
-            <div class="bg-white rounded-lg card-shadow p-6">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 lg:mb-0">
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-800 mb-4 lg:mb-0">
                         <i class="fas fa-history text-green-600 mr-2"></i>ประวัติการรับเข้า
                     </h3>
-                    <button onclick="exportReceiveData()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
-                        <i class="fas fa-download mr-2"></i>Export
+                    <button onclick="exportReceiveData()" class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base">
+                        <i class="fas fa-download mr-1 sm:mr-2"></i>Export
                     </button>
                 </div>
 
@@ -427,9 +510,9 @@
 
         <!-- Issue Tab -->
         <div id="issue" class="tab-content hidden">
-            <div class="bg-white rounded-lg card-shadow p-6 mb-6">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-arrow-up text-red-600 mr-3"></i>จ่ายออกสินค้า
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6 mb-4 sm:mb-6">
+                <h2 class="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">
+                    <i class="fas fa-arrow-up text-red-600 mr-2 sm:mr-3"></i>จ่ายออกสินค้า
                 </h2>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -479,10 +562,10 @@
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
-                                    <button id="issueStartScanBtn" onclick="startIssueCameraScanning()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                    <button id="issueStartScanBtn" onclick="startQRScannerGeneric('issueQrVideo', 'issueQrCanvas', 'issueScannerPlaceholder', 'issueScannerOverlay', 'issueStartScanBtn', 'issueStopScanBtn', 'issueScanResult', 'issueScanResultText', (qrData) => { document.getElementById('issueQrInput').value = qrData; searchIssueJobByQR(); closeIssueQRScanner(); })" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
                                         <i class="fas fa-camera mr-2"></i>เริ่มสแกน
                                     </button>
-                                    <button id="issueStopScanBtn" onclick="stopIssueCameraScanning()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
+                                    <button id="issueStopScanBtn" onclick="stopQRScannerGeneric(); document.getElementById('issueStartScanBtn').classList.remove('hidden'); document.getElementById('issueStopScanBtn').classList.add('hidden'); document.getElementById('issueQrVideo').classList.add('hidden'); document.getElementById('issueScannerOverlay').classList.add('hidden'); document.getElementById('issueScannerPlaceholder').classList.remove('hidden'); document.getElementById('issueScanResult').classList.add('hidden');" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
@@ -576,13 +659,13 @@
             </div>
 
             <!-- Issue History -->
-            <div class="bg-white rounded-lg card-shadow p-6">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 lg:mb-0">
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-800 mb-4 lg:mb-0">
                         <i class="fas fa-history text-red-600 mr-2"></i>ประวัติการจ่ายออก
                     </h3>
-                    <button onclick="exportIssueData()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors">
-                        <i class="fas fa-download mr-2"></i>Export
+                    <button onclick="exportIssueData()" class="bg-red-600 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base">
+                        <i class="fas fa-download mr-1 sm:mr-2"></i>Export
                     </button>
                 </div>
 
@@ -622,115 +705,127 @@
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab-content hidden">
             <!-- Summary Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white rounded-lg card-shadow p-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
                     <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-blue-100 text-blue-600">
-                            <i class="fas fa-boxes text-xl"></i>
+                        <div class="p-2 sm:p-3 rounded-full bg-blue-100 text-blue-600">
+                            <i class="fas fa-boxes text-lg sm:text-xl"></i>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">รายการสินค้า</p>
-                            <p id="totalItems" class="text-2xl font-bold text-gray-900">0</p>
+                        <div class="ml-2 sm:ml-4">
+                            <p class="text-xs sm:text-sm font-medium text-gray-600">รายการสินค้า</p>
+                            <p id="totalItems" class="text-lg sm:text-2xl font-bold text-gray-900">0</p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="bg-white rounded-lg card-shadow p-6">
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
                     <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-green-100 text-green-600">
-                            <i class="fas fa-arrow-down text-xl"></i>
+                        <div class="p-2 sm:p-3 rounded-full bg-green-100 text-green-600">
+                            <i class="fas fa-arrow-down text-lg sm:text-xl"></i>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">รับเข้าวันนี้</p>
-                            <p id="todayReceived" class="text-2xl font-bold text-gray-900">0</p>
+                        <div class="ml-2 sm:ml-4">
+                            <p class="text-xs sm:text-sm font-medium text-gray-600">รับเข้าวันนี้</p>
+                            <p id="todayReceived" class="text-lg sm:text-2xl font-bold text-gray-900">0</p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="bg-white rounded-lg card-shadow p-6">
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
                     <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-red-100 text-red-600">
-                            <i class="fas fa-arrow-up text-xl"></i>
+                        <div class="p-2 sm:p-3 rounded-full bg-red-100 text-red-600">
+                            <i class="fas fa-arrow-up text-lg sm:text-xl"></i>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">จ่ายออกวันนี้</p>
-                            <p id="todayIssued" class="text-2xl font-bold text-gray-900">0</p>
+                        <div class="ml-2 sm:ml-4">
+                            <p class="text-xs sm:text-sm font-medium text-gray-600">จ่ายออกวันนี้</p>
+                            <p id="todayIssued" class="text-lg sm:text-2xl font-bold text-gray-900">0</p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="bg-white rounded-lg card-shadow p-6">
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
                     <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
-                            <i class="fas fa-warehouse text-xl"></i>
+                        <div class="p-2 sm:p-3 rounded-full bg-yellow-100 text-yellow-600">
+                            <i class="fas fa-warehouse text-lg sm:text-xl"></i>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">สต็อกรวม</p>
-                            <p id="totalStock" class="text-2xl font-bold text-gray-900">0</p>
+                        <div class="ml-2 sm:ml-4">
+                            <p class="text-xs sm:text-sm font-medium text-gray-600">สต็อกรวม</p>
+                            <p id="totalStock" class="text-lg sm:text-2xl font-bold text-gray-900">0</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Charts and Heatmap -->
-            <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
-                <!-- Stock Chart -->
-                <div class="bg-white rounded-lg card-shadow p-6">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-bold text-gray-800">
-                            <i class="fas fa-chart-bar text-blue-600 mr-2"></i>สต็อกตาม Job No.
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8 mb-6 sm:mb-8">
+                <!-- Top 5 Stock Chart -->
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
+                    <div class="flex justify-between items-center mb-4 sm:mb-6">
+                        <h3 class="text-base sm:text-lg font-bold text-gray-800">
+                            <i class="fas fa-trophy text-yellow-600 mr-2"></i>Top 5 Job สต็อกสูงสุด
                         </h3>
-                        <button onclick="refreshCharts()" class="text-blue-600 hover:text-blue-800 transition-colors">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <div id="chartUpdateIndicator" class="w-2 h-2 bg-green-400 rounded-full animate-pulse hidden"></div>
+                            <button onclick="refreshCharts()" class="text-blue-600 hover:text-blue-800 transition-colors">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="h-80 overflow-y-auto">
-                        <canvas id="stockChart" width="400" height="300"></canvas>
+                    <div class="h-80">
+                        <canvas id="topStockChart" width="400" height="320"></canvas>
                     </div>
                 </div>
 
-                <!-- Storage Zone Heatmap -->
-                <div class="bg-white rounded-lg card-shadow p-6">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-lg font-bold text-gray-800">
-                            <i class="fas fa-th text-green-600 mr-2"></i>แผนที่โซนจัดเก็บ
+                <!-- Real-time Storage Zone Heatmap -->
+                <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6">
+                        <h3 class="text-base sm:text-lg font-bold text-gray-800 mb-2 sm:mb-0">
+                            <i class="fas fa-fire text-red-600 mr-2"></i>แผนที่โซนจัดเก็บ (Real-time)
                         </h3>
-                        <div class="flex items-center space-x-4 text-sm">
-                            <div class="flex items-center">
-                                <div class="w-4 h-4 bg-green-200 rounded mr-2"></div>
-                                <span>ว่าง</span>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-4 text-sm">
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-green-200 rounded mr-2"></div>
+                                    <span>ว่าง (0-30%)</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
+                                    <span>ปานกลาง (31-70%)</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                                    <span>เต็ม (71-100%)</span>
+                                </div>
                             </div>
-                            <div class="flex items-center">
-                                <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
-                                <span>ปานกลาง</span>
-                            </div>
-                            <div class="flex items-center">
-                                <div class="w-4 h-4 bg-red-400 rounded mr-2"></div>
-                                <span>เต็ม</span>
-                            </div>
+                            <div id="heatmapUpdateIndicator" class="w-2 h-2 bg-blue-400 rounded-full animate-pulse hidden"></div>
                         </div>
                     </div>
                     <div id="heatmapContainer" class="grid grid-cols-5 gap-2">
                         <!-- Heatmap zones will be generated here -->
                     </div>
+                    <div class="mt-4 text-center">
+                        <div class="text-sm text-gray-600">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            คลิกที่โซนเพื่อดูรายละเอียดและกรองข้อมูล
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Inventory Report -->
-            <div class="bg-white rounded-lg card-shadow p-6">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 lg:mb-0">
+            <div class="bg-white rounded-lg card-shadow p-3 sm:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-800 mb-4 lg:mb-0">
                         <i class="fas fa-clipboard-list text-purple-600 mr-2"></i>รายงานสต็อกคงเหลือ
                     </h3>
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <button onclick="exportInventoryPDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors">
-                            <i class="fas fa-file-pdf mr-2"></i>Export PDF
+                    <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                        <button onclick="exportInventoryPDF()" class="bg-red-600 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base">
+                            <i class="fas fa-file-pdf mr-1 sm:mr-2"></i>Export PDF
                         </button>
-                        <button onclick="exportInventoryExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
-                            <i class="fas fa-file-excel mr-2"></i>Export Excel
+                        <button onclick="exportInventoryExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base">
+                            <i class="fas fa-file-excel mr-1 sm:mr-2"></i>Export Excel
                         </button>
-                        <button onclick="refreshInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-                            <i class="fas fa-sync-alt mr-2"></i>รีเฟรช
+                        <button onclick="refreshInventory()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base">
+                            <i class="fas fa-sync-alt mr-1 sm:mr-2"></i>รีเฟรช
                         </button>
                     </div>
                 </div>
@@ -968,13 +1063,24 @@
                 btn.classList.add('border-transparent', 'text-gray-700');
             });
             
+            // Remove active class from mobile tab buttons
+            document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-50', 'text-blue-600');
+                btn.classList.add('text-gray-700');
+            });
+            
             // Show selected tab
             document.getElementById(tabName).classList.remove('hidden');
             
             // Add active class to selected tab button
             const activeBtn = document.getElementById(`tab-${tabName}`);
-            activeBtn.classList.remove('border-transparent', 'text-gray-700');
-            activeBtn.classList.add('border-blue-500', 'text-blue-600');
+            if (activeBtn) {
+                activeBtn.classList.remove('border-transparent', 'text-gray-700');
+                activeBtn.classList.add('border-blue-500', 'text-blue-600');
+            }
+            
+            // Update mobile tab title and active state
+            updateMobileTabTitle(tabName);
             
             if (tabName === 'qrSticker') {
                 populateJobSelect();
@@ -987,6 +1093,44 @@
             } else if (tabName === 'dashboard') {
                 updateDashboard();
             }
+        }
+
+        function updateMobileTabTitle(tabName) {
+            const titleElement = document.getElementById('currentTabTitle');
+            const titles = {
+                'itemMaster': '<i class="fas fa-box mr-2 text-blue-600"></i>ข้อมูลสินค้า',
+                'qrSticker': '<i class="fas fa-qrcode mr-2 text-blue-600"></i>สร้างสติกเกอร์',
+                'receive': '<i class="fas fa-arrow-down mr-2 text-green-600"></i>รับเข้าสินค้า',
+                'issue': '<i class="fas fa-arrow-up mr-2 text-red-600"></i>จ่ายออกสินค้า',
+                'dashboard': '<i class="fas fa-chart-bar mr-2 text-purple-600"></i>แดชบอร์ด'
+            };
+            titleElement.innerHTML = titles[tabName] || titles['itemMaster'];
+        }
+
+        function toggleMobileMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            const menuBtn = document.getElementById('mobileMenuBtn');
+            const icon = menuBtn.querySelector('i');
+            
+            if (mobileMenu.classList.contains('hidden')) {
+                mobileMenu.classList.remove('hidden');
+                icon.classList.remove('fa-bars');
+                icon.classList.add('fa-times');
+            } else {
+                mobileMenu.classList.add('hidden');
+                icon.classList.remove('fa-times');
+                icon.classList.add('fa-bars');
+            }
+        }
+
+        function closeMobileMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            const menuBtn = document.getElementById('mobileMenuBtn');
+            const icon = menuBtn.querySelector('i');
+            
+            mobileMenu.classList.add('hidden');
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
         }
 
         function showAddForm() {
@@ -1023,6 +1167,7 @@
                 populateJobSelect();
                 populateReceiveJobSelect();
                 populateIssueJobSelect();
+                updateDashboardIfVisible();
                 showNotification('ลบรายการเรียบร้อยแล้ว', 'success');
             }
         }
@@ -1059,6 +1204,7 @@
             populateJobSelect();
             populateReceiveJobSelect();
             populateIssueJobSelect();
+            updateDashboardIfVisible();
             closeModal();
         }
 
@@ -1195,6 +1341,10 @@
             document.getElementById('detail-size').textContent = item.size || '-';
             document.getElementById('detail-color').textContent = item.color || '-';
             document.getElementById('detail-customer').textContent = item.customerName;
+            document.getElementById('detail-quantity').textContent = item.quantity ? Number(item.quantity).toLocaleString() : '-';
+            document.getElementById('detail-packPerBag').textContent = item.packPerBag || '-';
+            document.getElementById('detail-bagCount').textContent = item.bagCount || '-';
+            document.getElementById('detail-remainder').textContent = item.remainder || '-';
             
             document.getElementById('jobDetails').classList.remove('hidden');
         }
@@ -1218,20 +1368,44 @@
             }
         }
 
+        // ===== REUSABLE QR SCANNER FUNCTIONS =====
+        
         function openAndStartQRScanner() {
-            document.getElementById('qrScannerModal').classList.remove('hidden');
-            // เปิดกล้องอัตโนมัติ
-            setTimeout(startCameraScanning, 300);
+            openQRScannerModal('qrScannerModal', () => {
+                startQRScannerGeneric(
+                    'qrVideo', 
+                    'qrCanvas', 
+                    'scannerPlaceholder', 
+                    'scannerOverlay',
+                    'startScanBtn',
+                    'stopScanBtn',
+                    'scanResult',
+                    'scanResultText',
+                    (qrData) => {
+                        document.getElementById('qrInput').value = qrData;
+                        searchJobByQR();
+                        closeQRScanner();
+                    }
+                );
+            });
         }
-
-
 
         function closeQRScanner() {
-            stopCameraScanning();
-            document.getElementById('qrScannerModal').classList.add('hidden');
+            closeQRScannerModal('qrScannerModal');
         }
 
-        async function startCameraScanning() {
+        // Generic QR Scanner Functions
+        function openQRScannerModal(modalId, onOpen) {
+            document.getElementById(modalId).classList.remove('hidden');
+            setTimeout(onOpen, 300);
+        }
+
+        function closeQRScannerModal(modalId) {
+            stopQRScannerGeneric();
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        async function startQRScannerGeneric(videoId, canvasId, placeholderId, overlayId, startBtnId, stopBtnId, resultId, resultTextId, onResult) {
             try {
                 // Check if camera is available
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1245,8 +1419,8 @@
                     return;
                 }
 
-                const video = document.getElementById('qrVideo');
-                const canvas = document.getElementById('qrCanvas');
+                const video = document.getElementById(videoId);
+                const canvas = document.getElementById(canvasId);
                 const context = canvas.getContext('2d');
                 
                 // Request camera access with fallback options
@@ -1272,13 +1446,13 @@
                 video.play();
                 
                 // Show video and hide placeholder
-                document.getElementById('scannerPlaceholder').classList.add('hidden');
-                document.getElementById('scannerOverlay').classList.remove('hidden');
+                document.getElementById(placeholderId).classList.add('hidden');
+                document.getElementById(overlayId).classList.remove('hidden');
                 video.classList.remove('hidden');
                 
                 // Toggle buttons
-                document.getElementById('startScanBtn').classList.add('hidden');
-                document.getElementById('stopScanBtn').classList.remove('hidden');
+                document.getElementById(startBtnId).classList.add('hidden');
+                document.getElementById(stopBtnId).classList.remove('hidden');
                 
                 isScanning = true;
                 
@@ -1294,7 +1468,7 @@
                             const code = jsQR(imageData.data, imageData.width, imageData.height);
                             
                             if (code) {
-                                handleQRScanResult(code.data);
+                                handleQRScanResultGeneric(code.data, resultId, resultTextId, onResult);
                             }
                         }
                     }, 100);
@@ -1318,7 +1492,7 @@
             }
         }
 
-        function stopCameraScanning() {
+        function stopQRScannerGeneric() {
             isScanning = false;
             
             if (scanningInterval) {
@@ -1330,19 +1504,10 @@
                 currentStream.getTracks().forEach(track => track.stop());
                 currentStream = null;
             }
-            
-            // Reset UI
-            const video = document.getElementById('qrVideo');
-            video.classList.add('hidden');
-            document.getElementById('scannerOverlay').classList.add('hidden');
-            document.getElementById('scannerPlaceholder').classList.remove('hidden');
-            document.getElementById('startScanBtn').classList.remove('hidden');
-            document.getElementById('stopScanBtn').classList.add('hidden');
-            document.getElementById('scanResult').classList.add('hidden');
         }
 
-        function handleQRScanResult(qrData) {
-            stopCameraScanning();
+        function handleQRScanResultGeneric(qrData, resultId, resultTextId, onResult) {
+            stopQRScannerGeneric();
             
             // Haptic feedback - ให้มือถือสั่นเมื่อสแกนสำเร็จ
             if (navigator.vibrate) {
@@ -1350,15 +1515,14 @@
             }
 
             // แสดงผลลัพธ์การสแกน
-            document.getElementById('scanResultText').textContent = `สแกนสำเร็จ: ${qrData}`;
-            document.getElementById('scanResult').classList.remove('hidden');
+            if (resultId && resultTextId) {
+                document.getElementById(resultTextId).textContent = `สแกนสำเร็จ: ${qrData}`;
+                document.getElementById(resultId).classList.remove('hidden');
+            }
 
-            document.getElementById('qrInput').value = qrData;
-            searchJobByQR();
-
-            // ปิด Modal อัตโนมัติหลัง 1 วินาที (ให้เวลาผู้ใช้เห็นผลลัพธ์)
+            // ปิด Modal อัตโนมัติหลัง 1 วินาที และเรียก callback
             setTimeout(() => {
-                closeQRScanner();
+                onResult(qrData);
                 showNotification('สแกน QR Code สำเร็จ!', 'success');
             }, 1000);
         }
@@ -1387,10 +1551,45 @@
             document.getElementById('receive-color').textContent = item.color || '-';
             document.getElementById('receive-customerName').textContent = item.customerName;
             document.getElementById('receive-lidCode').textContent = item.lidCode || '-';
+            document.getElementById('receive-quantity').textContent = item.quantity ? Number(item.quantity).toLocaleString() : '-';
             document.getElementById('receive-packPerBag').textContent = item.packPerBag || '-';
+            document.getElementById('receive-bagCount').textContent = item.bagCount || '-';
+            document.getElementById('receive-remainder').textContent = item.remainder || '-';
+            
+            // Calculate and show storage progress
+            updateStorageProgress(item.jobNo, item.bagCount);
             
             document.getElementById('receiveJobDetails').classList.remove('hidden');
             calculateReceiveQuantity();
+        }
+
+        function updateStorageProgress(jobNo, totalBags) {
+            // Calculate total bags already stored for this job
+            const storedBags = receiveHistory
+                .filter(r => r.jobNo === jobNo)
+                .reduce((sum, r) => sum + r.bagCount, 0);
+            
+            const totalBagsNum = parseInt(totalBags) || 0;
+            const remainingBags = Math.max(0, totalBagsNum - storedBags);
+            const progressPercent = totalBagsNum > 0 ? Math.round((storedBags / totalBagsNum) * 100) : 0;
+            
+            // Update display
+            document.getElementById('receive-storedBags').textContent = storedBags.toLocaleString();
+            document.getElementById('receive-remainingBags').textContent = remainingBags.toLocaleString();
+            document.getElementById('receive-progressPercent').textContent = progressPercent + '%';
+            document.getElementById('receive-progressBar').style.width = progressPercent + '%';
+            
+            // Update progress bar color based on completion
+            const progressBar = document.getElementById('receive-progressBar');
+            if (progressPercent >= 100) {
+                progressBar.className = 'bg-green-600 h-2 rounded-full transition-all duration-300';
+            } else if (progressPercent >= 75) {
+                progressBar.className = 'bg-blue-600 h-2 rounded-full transition-all duration-300';
+            } else if (progressPercent >= 50) {
+                progressBar.className = 'bg-yellow-500 h-2 rounded-full transition-all duration-300';
+            } else {
+                progressBar.className = 'bg-orange-500 h-2 rounded-full transition-all duration-300';
+            }
         }
 
         function clearReceiveJobData() {
@@ -1606,6 +1805,12 @@
             localStorage.setItem('receiveHistory', JSON.stringify(receiveHistory));
             renderReceiveHistory();
             updateZoneStatus();
+            updateDashboardIfVisible();
+            
+            // Update storage progress after saving
+            const item = items[selectedIndex];
+            updateStorageProgress(item.jobNo, item.bagCount);
+            
             clearReceiveForm();
         }
 
@@ -1718,22 +1923,29 @@
             }
             
             const headers = ['วันที่รับ', 'Job No.', 'รหัสสินค้า', 'ชื่อสินค้า', 'ลูกค้า', 'จำนวนถุง', 'จำนวนรับ', 'โซน', 'Waste', 'หมายเหตุ'];
-            const csvContent = [
-                headers.join(','),
-                ...receiveHistory.map(receive => [
-                    receive.receiveDate, receive.jobNo, receive.productCode, receive.productName,
-                    receive.customerName, receive.bagCount, receive.receiveQuantity, receive.storageArea,
-                    receive.waste, receive.remarks
-                ].map(field => `"${field || ''}"`).join(','))
-            ].join('\n');
             
-            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `receive-history-${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
+            const data = receiveHistory.map(receive => [
+                receive.receiveDate || '', receive.jobNo || '', receive.productCode || '', receive.productName || '',
+                receive.customerName || '', receive.bagCount || '', receive.receiveQuantity || '', receive.storageArea || '',
+                receive.waste || '', receive.remarks || ''
+            ]);
             
-            showNotification('Export ข้อมูลการรับเข้าเรียบร้อยแล้ว', 'success');
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Receive History');
+            
+            // Auto-size columns
+            const colWidths = headers.map((_, i) => {
+                const maxLength = Math.max(
+                    headers[i].length,
+                    ...data.map(row => String(row[i] || '').length)
+                );
+                return { wch: Math.min(maxLength + 2, 30) };
+            });
+            ws['!cols'] = colWidths;
+            
+            XLSX.writeFile(wb, `receive-history-${new Date().toISOString().split('T')[0]}.xlsx`);
+            showNotification('Export Excel การรับเข้าเรียบร้อยแล้ว', 'success');
         }
 
         // Issue Functions
@@ -1768,147 +1980,27 @@
         }
 
         function openAndStartIssueQRScanner() {
-            document.getElementById('issueQrScannerModal').classList.remove('hidden');
-            setTimeout(startIssueCameraScanning, 300);
+            openQRScannerModal('issueQrScannerModal', () => {
+                startQRScannerGeneric(
+                    'issueQrVideo', 
+                    'issueQrCanvas', 
+                    'issueScannerPlaceholder', 
+                    'issueScannerOverlay',
+                    'issueStartScanBtn',
+                    'issueStopScanBtn',
+                    'issueScanResult',
+                    'issueScanResultText',
+                    (qrData) => {
+                        document.getElementById('issueQrInput').value = qrData;
+                        searchIssueJobByQR();
+                        closeIssueQRScanner();
+                    }
+                );
+            });
         }
-
-
 
         function closeIssueQRScanner() {
-            stopIssueCameraScanning();
-            document.getElementById('issueQrScannerModal').classList.add('hidden');
-        }
-
-        async function startIssueCameraScanning() {
-            try {
-                // Check if camera is available
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('Camera not supported on this device');
-                }
-
-                // Check if running on HTTPS or localhost
-                const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-                if (!isSecure) {
-                    showNotification('กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น', 'error');
-                    return;
-                }
-
-                const video = document.getElementById('issueQrVideo');
-                const canvas = document.getElementById('issueQrCanvas');
-                const context = canvas.getContext('2d');
-                
-                // Request camera access with fallback options
-                try {
-                    currentStream = await navigator.mediaDevices.getUserMedia({
-                        video: { 
-                            facingMode: 'environment', // Use back camera on mobile
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    });
-                } catch (envError) {
-                    // Fallback to any available camera
-                    currentStream = await navigator.mediaDevices.getUserMedia({
-                        video: { 
-                            width: { ideal: 640 },
-                            height: { ideal: 480 }
-                        }
-                    });
-                }
-                
-                video.srcObject = currentStream;
-                video.play();
-                
-                // Show video and hide placeholder
-                document.getElementById('issueScannerPlaceholder').classList.add('hidden');
-                document.getElementById('issueScannerOverlay').classList.remove('hidden');
-                video.classList.remove('hidden');
-                
-                // Toggle buttons
-                document.getElementById('issueStartScanBtn').classList.add('hidden');
-                document.getElementById('issueStopScanBtn').classList.remove('hidden');
-                
-                isScanning = true;
-                
-                video.addEventListener('loadedmetadata', () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    
-                    // Start scanning
-                    scanningInterval = setInterval(() => {
-                        if (isScanning && video.readyState === video.HAVE_ENOUGH_DATA) {
-                            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                            const code = jsQR(imageData.data, imageData.width, imageData.height);
-                            
-                            if (code) {
-                                handleIssueQRScanResult(code.data);
-                            }
-                        }
-                    }, 100);
-                });
-                
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-                let errorMessage = 'ไม่สามารถเข้าถึงกล้องได้';
-                
-                if (error.name === 'NotAllowedError') {
-                    errorMessage = 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์';
-                } else if (error.name === 'NotFoundError') {
-                    errorMessage = 'ไม่พบกล้องในอุปกรณ์นี้';
-                } else if (error.name === 'NotSupportedError') {
-                    errorMessage = 'เบราว์เซอร์ไม่รองรับการใช้งานกล้อง';
-                } else if (error.message.includes('HTTPS')) {
-                    errorMessage = 'กล้องต้องใช้งานผ่าน HTTPS หรือ localhost เท่านั้น';
-                }
-                
-                showNotification(errorMessage, 'error');
-            }
-        }
-
-        function stopIssueCameraScanning() {
-            isScanning = false;
-            
-            if (scanningInterval) {
-                clearInterval(scanningInterval);
-                scanningInterval = null;
-            }
-            
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-                currentStream = null;
-            }
-            
-            // Reset UI
-            const video = document.getElementById('issueQrVideo');
-            video.classList.add('hidden');
-            document.getElementById('issueScannerOverlay').classList.add('hidden');
-            document.getElementById('issueScannerPlaceholder').classList.remove('hidden');
-            document.getElementById('issueStartScanBtn').classList.remove('hidden');
-            document.getElementById('issueStopScanBtn').classList.add('hidden');
-            document.getElementById('issueScanResult').classList.add('hidden');
-        }
-
-        function handleIssueQRScanResult(qrData) {
-            stopIssueCameraScanning();
-            
-            // Haptic feedback - ให้มือถือสั่นเมื่อสแกนสำเร็จ
-            if (navigator.vibrate) {
-                navigator.vibrate([150, 50, 150]); // รูปแบบการสั่นที่ชัดเจนขึ้น
-            }
-
-            // แสดงผลลัพธ์การสแกน
-            document.getElementById('issueScanResultText').textContent = `สแกนสำเร็จ: ${qrData}`;
-            document.getElementById('issueScanResult').classList.remove('hidden');
-
-            document.getElementById('issueQrInput').value = qrData;
-            searchIssueJobByQR();
-
-            // ปิด Modal อัตโนมัติหลัง 1 วินาที (ให้เวลาผู้ใช้เห็นผลลัพธ์)
-            setTimeout(() => {
-                closeIssueQRScanner();
-                showNotification('สแกน QR Code สำเร็จ!', 'success');
-            }, 1000);
+            closeQRScannerModal('issueQrScannerModal');
         }
 
         function loadIssueJobData() {
@@ -2058,6 +2150,7 @@
             renderIssueHistory();
             updateStockInfo(selectedIndex); // Update stock info after saving
             updateZoneStatus();
+            updateDashboardIfVisible();
             clearIssueForm();
         }
 
@@ -2158,22 +2251,29 @@
             }
             
             const headers = ['วันที่จ่าย', 'Job No.', 'รหัสสินค้า', 'ชื่อสินค้า', 'ลูกค้า', 'จำนวนถุง', 'จำนวนจ่าย', 'ผู้รับ', 'Waste', 'หมายเหตุ'];
-            const csvContent = [
-                headers.join(','),
-                ...issueHistory.map(issue => [
-                    issue.issueDate, issue.jobNo, issue.productCode, issue.productName,
-                    issue.customerName, issue.issueBagCount, issue.issueQuantity, issue.recipient,
-                    issue.waste, issue.remarks
-                ].map(field => `"${field || ''}"`).join(','))
-            ].join('\n');
             
-            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `issue-history-${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
+            const data = issueHistory.map(issue => [
+                issue.issueDate || '', issue.jobNo || '', issue.productCode || '', issue.productName || '',
+                issue.customerName || '', issue.issueBagCount || '', issue.issueQuantity || '', issue.recipient || '',
+                issue.waste || '', issue.remarks || ''
+            ]);
             
-            showNotification('Export ข้อมูลการจ่ายออกเรียบร้อยแล้ว', 'success');
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Issue History');
+            
+            // Auto-size columns
+            const colWidths = headers.map((_, i) => {
+                const maxLength = Math.max(
+                    headers[i].length,
+                    ...data.map(row => String(row[i] || '').length)
+                );
+                return { wch: Math.min(maxLength + 2, 30) };
+            });
+            ws['!cols'] = colWidths;
+            
+            XLSX.writeFile(wb, `issue-history-${new Date().toISOString().split('T')[0]}.xlsx`);
+            showNotification('Export Excel การจ่ายออกเรียบร้อยแล้ว', 'success');
         }
 
         // QR Sticker Functions (existing)
@@ -2268,23 +2368,30 @@
             }
             
             const headers = ['วันที่', 'MC', 'Job No.', 'กำหนดส่งสินค้า', 'OE', 'รหัสสินค้า', 'ชื่อสินค้า', 'ขนาด', 'สี', 'รหัสลูกค้า', 'ชื่อลูกค้า', 'โลโก้', 'วัสดุประกอบ', 'รหัสฝาประกอบ', 'จำนวนผลิต', 'บรรจุ/ถุง', 'จำนวนถุง', 'เศษ'];
-            const csvContent = [
-                headers.join(','),
-                ...items.map(item => [
-                    item.date, item.mc, item.jobNo, item.deliveryDate, item.oe,
-                    item.productCode, item.productName, item.size, item.color,
-                    item.customerCode, item.customerName, item.logo, item.material,
-                    item.lidCode, item.quantity, item.packPerBag, item.bagCount, item.remainder
-                ].map(field => `"${field || ''}"`).join(','))
-            ].join('\n');
             
-            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `warehouse-items-${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
+            const data = items.map(item => [
+                item.date || '', item.mc || '', item.jobNo || '', item.deliveryDate || '', item.oe || '',
+                item.productCode || '', item.productName || '', item.size || '', item.color || '',
+                item.customerCode || '', item.customerName || '', item.logo || '', item.material || '',
+                item.lidCode || '', item.quantity || '', item.packPerBag || '', item.bagCount || '', item.remainder || ''
+            ]);
             
-            showNotification('Export ข้อมูลเรียบร้อยแล้ว', 'success');
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Items');
+            
+            // Auto-size columns
+            const colWidths = headers.map((_, i) => {
+                const maxLength = Math.max(
+                    headers[i].length,
+                    ...data.map(row => String(row[i] || '').length)
+                );
+                return { wch: Math.min(maxLength + 2, 30) };
+            });
+            ws['!cols'] = colWidths;
+            
+            XLSX.writeFile(wb, `warehouse-items-${new Date().toISOString().split('T')[0]}.xlsx`);
+            showNotification('Export Excel เรียบร้อยแล้ว', 'success');
         }
 
         function importData() {
@@ -2294,32 +2401,52 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const csv = e.target.result;
-                    const lines = csv.split('\n');
-                    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                     
+                    if (jsonData.length < 2) {
+                        showNotification('ไฟล์ Excel ไม่มีข้อมูล', 'error');
+                        return;
+                    }
+                    
+                    const headers = jsonData[0];
                     const importedItems = [];
-                    for (let i = 1; i < lines.length; i++) {
-                        if (lines[i].trim()) {
-                            const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+                    
+                    // Map Excel columns to item properties
+                    const fieldMap = {
+                        'วันที่': 'date', 'MC': 'mc', 'Job No.': 'jobNo',
+                        'กำหนดส่งสินค้า': 'deliveryDate', 'OE': 'oe',
+                        'รหัสสินค้า': 'productCode', 'ชื่อสินค้า': 'productName',
+                        'ขนาด': 'size', 'สี': 'color', 'รหัสลูกค้า': 'customerCode',
+                        'ชื่อลูกค้า': 'customerName', 'โลโก้': 'logo',
+                        'วัสดุประกอบ': 'material', 'รหัสฝาประกอบ': 'lidCode',
+                        'จำนวนผลิต': 'quantity', 'บรรจุ/ถุง': 'packPerBag',
+                        'จำนวนถุง': 'bagCount', 'เศษ': 'remainder'
+                    };
+                    
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        if (row && row.length > 0) {
                             const item = {};
-                            
-                            // Map CSV columns to item properties
-                            const fieldMap = {
-                                'วันที่': 'date', 'MC': 'mc', 'Job No.': 'jobNo',
-                                'กำหนดส่งสินค้า': 'deliveryDate', 'OE': 'oe',
-                                'รหัสสินค้า': 'productCode', 'ชื่อสินค้า': 'productName',
-                                'ขนาด': 'size', 'สี': 'color', 'รหัสลูกค้า': 'customerCode',
-                                'ชื่อลูกค้า': 'customerName', 'โลโก้': 'logo',
-                                'วัสดุประกอบ': 'material', 'รหัสฝาประกอบ': 'lidCode',
-                                'จำนวนผลิต': 'quantity', 'บรรจุ/ถุง': 'packPerBag',
-                                'จำนวนถุง': 'bagCount', 'เศษ': 'remainder'
-                            };
                             
                             headers.forEach((header, index) => {
                                 const field = fieldMap[header];
-                                if (field && values[index]) {
-                                    item[field] = values[index];
+                                if (field && row[index] !== undefined && row[index] !== null && row[index] !== '') {
+                                    // Handle date fields
+                                    if (field === 'date' || field === 'deliveryDate') {
+                                        if (typeof row[index] === 'number') {
+                                            // Excel date serial number
+                                            const excelDate = new Date((row[index] - 25569) * 86400 * 1000);
+                                            item[field] = excelDate.toISOString().split('T')[0];
+                                        } else {
+                                            item[field] = row[index];
+                                        }
+                                    } else {
+                                        item[field] = String(row[index]).trim();
+                                    }
                                 }
                             });
                             
@@ -2338,25 +2465,58 @@
                         populateIssueJobSelect();
                         showNotification(`Import ข้อมูล ${importedItems.length} รายการเรียบร้อยแล้ว`, 'success');
                     } else {
-                        showNotification('ไม่พบข้อมูลที่ถูกต้องในไฟล์', 'error');
+                        showNotification('ไม่พบข้อมูลที่ถูกต้องในไฟล์ Excel', 'error');
                     }
                 } catch (error) {
-                    showNotification('เกิดข้อผิดพลาดในการอ่านไฟล์', 'error');
+                    console.error('Import error:', error);
+                    showNotification('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel', 'error');
                 }
             };
-            reader.readAsText(file, 'UTF-8');
+            reader.readAsArrayBuffer(file);
         }
 
         // Dashboard Functions
         let inventoryData = [];
         let stockChart = null;
+        let dashboardUpdateTimeout = null;
 
         function updateDashboard() {
             calculateInventoryData();
             updateSummaryCards();
-            renderStockChart();
-            renderHeatmap();
+            renderTopStockChart();
+            renderRealTimeHeatmap();
             renderInventoryTable();
+        }
+
+        function updateDashboardIfVisible() {
+            // Check if dashboard tab is currently visible
+            const dashboardTab = document.getElementById('dashboard');
+            if (!dashboardTab.classList.contains('hidden')) {
+                // Show update indicators
+                showUpdateIndicators();
+                
+                // Debounce updates to avoid too frequent refreshes
+                if (dashboardUpdateTimeout) {
+                    clearTimeout(dashboardUpdateTimeout);
+                }
+                
+                dashboardUpdateTimeout = setTimeout(() => {
+                    updateDashboard();
+                    hideUpdateIndicators();
+                }, 500);
+            }
+        }
+
+        function showUpdateIndicators() {
+            document.getElementById('chartUpdateIndicator').classList.remove('hidden');
+            document.getElementById('heatmapUpdateIndicator').classList.remove('hidden');
+        }
+
+        function hideUpdateIndicators() {
+            setTimeout(() => {
+                document.getElementById('chartUpdateIndicator').classList.add('hidden');
+                document.getElementById('heatmapUpdateIndicator').classList.add('hidden');
+            }, 1000);
         }
 
         function calculateInventoryData() {
@@ -2420,8 +2580,8 @@
             document.getElementById('totalStock').textContent = totalStock.toLocaleString();
         }
 
-        function renderStockChart() {
-            const canvas = document.getElementById('stockChart');
+        function renderTopStockChart() {
+            const canvas = document.getElementById('topStockChart');
             const ctx = canvas.getContext('2d');
             
             // Clear canvas
@@ -2429,65 +2589,104 @@
             
             if (inventoryData.length === 0) {
                 ctx.fillStyle = '#9CA3AF';
-                ctx.font = '16px Arial';
+                ctx.font = '16px Kanit';
                 ctx.textAlign = 'center';
                 ctx.fillText('ไม่มีข้อมูลสต็อก', canvas.width / 2, canvas.height / 2);
                 return;
             }
             
-            // Sort by remaining stock (descending)
-            const sortedData = inventoryData
+            // Get top 5 jobs with highest stock
+            const topJobs = inventoryData
                 .filter(item => item.remainingStock > 0)
                 .sort((a, b) => b.remainingStock - a.remainingStock)
-                .slice(0, 10); // Top 10
+                .slice(0, 5);
             
-            if (sortedData.length === 0) {
+            if (topJobs.length === 0) {
                 ctx.fillStyle = '#9CA3AF';
-                ctx.font = '16px Arial';
+                ctx.font = '16px Kanit';
                 ctx.textAlign = 'center';
                 ctx.fillText('ไม่มีสต็อกคงเหลือ', canvas.width / 2, canvas.height / 2);
                 return;
             }
             
-            const maxStock = Math.max(...sortedData.map(item => item.remainingStock));
-            const barHeight = 25;
-            const barSpacing = 5;
-            const chartHeight = sortedData.length * (barHeight + barSpacing);
-            const chartWidth = canvas.width - 120;
-            const startY = 20;
+            const maxStock = Math.max(...topJobs.map(item => item.remainingStock));
+            const chartWidth = canvas.width - 140;
+            const chartHeight = canvas.height - 80;
+            const barWidth = 50;
+            const barSpacing = (chartWidth - (barWidth * topJobs.length)) / (topJobs.length + 1);
             
-            // Set canvas height
-            canvas.height = Math.max(300, chartHeight + 40);
+            // Colors for top 5 (gold, silver, bronze, etc.)
+            const colors = ['#FFD700', '#C0C0C0', '#CD7F32', '#4F46E5', '#10B981'];
             
-            sortedData.forEach((item, index) => {
-                const y = startY + index * (barHeight + barSpacing);
-                const barWidth = (item.remainingStock / maxStock) * chartWidth;
+            topJobs.forEach((item, index) => {
+                const x = barSpacing + (index * (barWidth + barSpacing));
+                const barHeight = (item.remainingStock / maxStock) * (chartHeight - 60);
+                const y = chartHeight - barHeight + 20;
                 
-                // Draw bar
-                ctx.fillStyle = item.status === 'instock' ? '#10B981' : 
-                               item.status === 'lowstock' ? '#F59E0B' : '#EF4444';
-                ctx.fillRect(100, y, barWidth, barHeight);
+                // Draw bar with gradient effect
+                const gradient = ctx.createLinearGradient(0, y, 0, y + barHeight);
+                gradient.addColorStop(0, colors[index]);
+                gradient.addColorStop(1, colors[index] + '80');
                 
-                // Draw job number
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, barWidth, barHeight);
+                
+                // Draw border
+                ctx.strokeStyle = colors[index];
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, barWidth, barHeight);
+                
+                // Draw rank badge
+                ctx.fillStyle = colors[index];
+                ctx.beginPath();
+                ctx.arc(x + barWidth/2, y - 10, 12, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 12px Kanit';
+                ctx.textAlign = 'center';
+                ctx.fillText((index + 1).toString(), x + barWidth/2, y - 6);
+                
+                // Draw job number (rotated)
+                ctx.save();
+                ctx.translate(x + barWidth/2, chartHeight + 35);
+                ctx.rotate(-Math.PI / 4);
                 ctx.fillStyle = '#374151';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'right';
-                ctx.fillText(item.jobNo, 95, y + 16);
+                ctx.font = '12px Kanit';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.jobNo, 0, 0);
+                ctx.restore();
                 
-                // Draw stock value
-                ctx.textAlign = 'left';
-                ctx.fillText(item.remainingStock.toLocaleString(), 105 + barWidth, y + 16);
+                // Draw stock value on top of bar
+                ctx.fillStyle = '#374151';
+                ctx.font = 'bold 11px Kanit';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.remainingStock.toLocaleString(), x + barWidth/2, y - 25);
+                
+                // Draw customer name (truncated)
+                ctx.fillStyle = '#6B7280';
+                ctx.font = '10px Kanit';
+                const customerName = item.customerName.length > 8 ? 
+                    item.customerName.substring(0, 8) + '...' : item.customerName;
+                ctx.fillText(customerName, x + barWidth/2, chartHeight + 55);
             });
+            
+            // Draw title
+            ctx.fillStyle = '#1F2937';
+            ctx.font = 'bold 14px Kanit';
+            ctx.textAlign = 'center';
+            ctx.fillText('🏆 Top 5 Jobs ที่มีสต็อกสูงสุด', canvas.width / 2, 15);
         }
 
-        function renderHeatmap() {
+        function renderRealTimeHeatmap() {
             const container = document.getElementById('heatmapContainer');
             container.innerHTML = '';
             
             const zones = ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'D5'];
             
-            zones.forEach(zone => {
-                // Calculate zone utilization
+            // Calculate max stock across all zones for better color scaling
+            let maxZoneStock = 0;
+            const zoneData = zones.map(zone => {
                 const zoneItems = receiveHistory.filter(r => r.storageArea === zone);
                 const zoneStock = zoneItems.reduce((sum, r) => {
                     const issued = issueHistory
@@ -2496,29 +2695,81 @@
                     return sum + (r.receiveQuantity - issued);
                 }, 0);
                 
-                // Determine color based on utilization (assuming max capacity of 1000 per zone)
-                const utilization = Math.min(zoneStock / 1000, 1);
-                let bgColor = 'bg-green-200';
-                let textColor = 'text-green-800';
+                maxZoneStock = Math.max(maxZoneStock, zoneStock);
                 
-                if (utilization > 0.7) {
-                    bgColor = 'bg-red-400';
-                    textColor = 'text-red-900';
-                } else if (utilization > 0.4) {
+                return {
+                    zone: zone,
+                    stock: zoneStock,
+                    jobs: [...new Set(zoneItems.map(r => r.jobNo))].length
+                };
+            });
+            
+            zoneData.forEach(data => {
+                const { zone, stock, jobs } = data;
+                
+                // Calculate utilization percentage based on actual max stock
+                const utilization = maxZoneStock > 0 ? stock / maxZoneStock : 0;
+                
+                // Enhanced color scheme with more granular levels
+                let bgColor, textColor, borderColor, intensity;
+                
+                if (utilization === 0) {
+                    bgColor = 'bg-gray-100';
+                    textColor = 'text-gray-600';
+                    borderColor = 'border-gray-300';
+                    intensity = 'ว่าง';
+                } else if (utilization <= 0.3) {
+                    bgColor = 'bg-green-200';
+                    textColor = 'text-green-800';
+                    borderColor = 'border-green-400';
+                    intensity = 'น้อย';
+                } else if (utilization <= 0.7) {
                     bgColor = 'bg-yellow-400';
                     textColor = 'text-yellow-900';
+                    borderColor = 'border-yellow-600';
+                    intensity = 'ปานกลาง';
+                } else {
+                    bgColor = 'bg-red-500';
+                    textColor = 'text-white';
+                    borderColor = 'border-red-700';
+                    intensity = 'เต็ม';
                 }
                 
                 const zoneDiv = document.createElement('div');
-                zoneDiv.className = `${bgColor} ${textColor} p-4 rounded-lg text-center cursor-pointer hover:opacity-80 transition-opacity`;
+                zoneDiv.className = `${bgColor} ${textColor} ${borderColor} p-3 rounded-lg text-center cursor-pointer hover:scale-105 transition-all duration-200 border-2 shadow-sm hover:shadow-md`;
+                
+                // Add pulse animation for high utilization zones
+                if (utilization > 0.8) {
+                    zoneDiv.classList.add('animate-pulse');
+                }
+                
                 zoneDiv.innerHTML = `
-                    <div class="font-bold text-lg">${zone}</div>
-                    <div class="text-sm">${zoneStock.toLocaleString()}</div>
-                    <div class="text-xs">${Math.round(utilization * 100)}%</div>
+                    <div class="font-bold text-lg mb-1">${zone}</div>
+                    <div class="text-sm font-medium">${stock.toLocaleString()}</div>
+                    <div class="text-xs opacity-90">${jobs} Jobs</div>
+                    <div class="text-xs font-medium mt-1">${intensity}</div>
+                    <div class="w-full bg-white bg-opacity-30 rounded-full h-1 mt-2">
+                        <div class="bg-current h-1 rounded-full transition-all duration-300" style="width: ${utilization * 100}%"></div>
+                    </div>
                 `;
-                zoneDiv.onclick = () => filterByZone(zone);
+                
+                // Enhanced click handler with zone details
+                zoneDiv.onclick = () => {
+                    filterByZone(zone);
+                    showZoneDetails(zone, stock, jobs, intensity);
+                };
+                
+                // Tooltip on hover
+                zoneDiv.title = `โซน ${zone}\nสต็อก: ${stock.toLocaleString()} ชิ้น\nจำนวน Jobs: ${jobs}\nสถานะ: ${intensity} (${Math.round(utilization * 100)}%)`;
+                
                 container.appendChild(zoneDiv);
             });
+        }
+
+        function showZoneDetails(zone, stock, jobs, intensity) {
+            // Show zone details in a temporary notification
+            const details = `โซน ${zone}: ${stock.toLocaleString()} ชิ้น | ${jobs} Jobs | สถานะ: ${intensity}`;
+            showNotification(details, 'info');
         }
 
         function renderInventoryTable() {
@@ -2616,8 +2867,12 @@
         }
 
         function refreshCharts() {
-            updateDashboard();
-            showNotification('รีเฟรชข้อมูลเรียบร้อยแล้ว', 'success');
+            showUpdateIndicators();
+            setTimeout(() => {
+                updateDashboard();
+                hideUpdateIndicators();
+                showNotification('รีเฟรชข้อมูลเรียบร้อยแล้ว', 'success');
+            }, 300);
         }
 
         function refreshInventory() {
@@ -2689,23 +2944,42 @@
             }
             
             const headers = ['Job No.', 'รหัสสินค้า', 'ชื่อสินค้า', 'ลูกค้า', 'รับเข้า', 'จ่ายออก', 'คงเหลือ', 'โซนจัดเก็บ', 'สถานะ'];
-            const csvContent = [
-                headers.join(','),
-                ...inventoryData.map(item => [
-                    item.jobNo, item.productCode, item.productName, item.customerName,
-                    item.totalReceived, item.totalIssued, item.remainingStock,
-                    item.storageZones.join(';'),
-                    item.status === 'instock' ? 'มีสต็อก' : item.status === 'lowstock' ? 'สต็อกต่ำ' : 'หมดสต็อก'
-                ].map(field => `"${field || ''}"`).join(','))
-            ].join('\n');
             
-            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `inventory-report-${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
+            const data = inventoryData.map(item => [
+                item.jobNo || '', item.productCode || '', item.productName || '', item.customerName || '',
+                item.totalReceived || 0, item.totalIssued || 0, item.remainingStock || 0,
+                item.storageZones.join(';') || '',
+                item.status === 'instock' ? 'มีสต็อก' : item.status === 'lowstock' ? 'สต็อกต่ำ' : 'หมดสต็อก'
+            ]);
             
-            showNotification('Export Excel เรียบร้อยแล้ว', 'success');
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventory Report');
+            
+            // Auto-size columns
+            const colWidths = headers.map((_, i) => {
+                const maxLength = Math.max(
+                    headers[i].length,
+                    ...data.map(row => String(row[i] || '').length)
+                );
+                return { wch: Math.min(maxLength + 2, 30) };
+            });
+            ws['!cols'] = colWidths;
+            
+            // Add formatting for numbers
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+                for (let C = 4; C <= 6; ++C) { // Columns E, F, G (received, issued, remaining)
+                    const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                    if (ws[cellAddress]) {
+                        ws[cellAddress].t = 'n'; // Set as number type
+                        ws[cellAddress].z = '#,##0'; // Number format with comma separator
+                    }
+                }
+            }
+            
+            XLSX.writeFile(wb, `inventory-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+            showNotification('Export Excel รายงานสต็อกเรียบร้อยแล้ว', 'success');
         }
 
         function selectAutoPosition() {
@@ -2758,5 +3032,5 @@
             }, 3000);
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f662dd006537db',t:'MTc1NzkyMTA4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f686cb73abd32c',t:'MTc1NzkyMjU1Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
