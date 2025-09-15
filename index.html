@@ -133,6 +133,9 @@
         </div>
     </nav>
 
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 space-y-2 z-50"></div>
+
     <!-- Main Content -->
     <main class="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
         <!-- Item Master Tab -->
@@ -312,10 +315,10 @@
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
-                                    <button id="startScanBtn" onclick="startQRScannerGeneric('qrVideo', 'qrCanvas', 'scannerPlaceholder', 'scannerOverlay', 'startScanBtn', 'stopScanBtn', 'scanResult', 'scanResultText', (qrData) => { document.getElementById('qrInput').value = qrData; searchJobByQR(); closeQRScanner(); })" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                    <button id="startScanBtn" onclick="startCameraScanning()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-camera mr-2"></i>เริ่มสแกน
                                     </button>
-                                    <button id="stopScanBtn" onclick="stopQRScannerGeneric(); document.getElementById('startScanBtn').classList.remove('hidden'); document.getElementById('stopScanBtn').classList.add('hidden'); document.getElementById('qrVideo').classList.add('hidden'); document.getElementById('scannerOverlay').classList.add('hidden'); document.getElementById('scannerPlaceholder').classList.remove('hidden'); document.getElementById('scanResult').classList.add('hidden');" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
+                                    <button id="stopScanBtn" onclick="stopCameraScanning()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
@@ -562,10 +565,10 @@
                                     </div>
                                 </div>
                                 <div class="flex justify-center space-x-3">
-                                    <button id="issueStartScanBtn" onclick="startQRScannerGeneric('issueQrVideo', 'issueQrCanvas', 'issueScannerPlaceholder', 'issueScannerOverlay', 'issueStartScanBtn', 'issueStopScanBtn', 'issueScanResult', 'issueScanResultText', (qrData) => { document.getElementById('issueQrInput').value = qrData; searchIssueJobByQR(); closeIssueQRScanner(); })" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                    <button id="issueStartScanBtn" onclick="startIssueCameraScanning()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-camera mr-2"></i>เริ่มสแกน
                                     </button>
-                                    <button id="issueStopScanBtn" onclick="stopQRScannerGeneric(); document.getElementById('issueStartScanBtn').classList.remove('hidden'); document.getElementById('issueStopScanBtn').classList.add('hidden'); document.getElementById('issueQrVideo').classList.add('hidden'); document.getElementById('issueScannerOverlay').classList.add('hidden'); document.getElementById('issueScannerPlaceholder').classList.remove('hidden'); document.getElementById('issueScanResult').classList.add('hidden');" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
+                                    <button id="issueStopScanBtn" onclick="stopIssueCameraScanning()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors hidden">
                                         <i class="fas fa-stop mr-2"></i>หยุดสแกน
                                     </button>
                                 </div>
@@ -1371,38 +1374,46 @@
         // ===== REUSABLE QR SCANNER FUNCTIONS =====
         
         function openAndStartQRScanner() {
-            openQRScannerModal('qrScannerModal', () => {
-                startQRScannerGeneric(
-                    'qrVideo', 
-                    'qrCanvas', 
-                    'scannerPlaceholder', 
-                    'scannerOverlay',
-                    'startScanBtn',
-                    'stopScanBtn',
-                    'scanResult',
-                    'scanResultText',
-                    (qrData) => {
-                        document.getElementById('qrInput').value = qrData;
-                        searchJobByQR();
-                        closeQRScanner();
-                    }
-                );
-            });
+            document.getElementById('qrScannerModal').classList.remove('hidden');
+            setTimeout(startCameraScanning, 300); // เปิดกล้องอัตโนมัติ
         }
 
         function closeQRScanner() {
-            closeQRScannerModal('qrScannerModal');
+            stopCameraScanning();
+            document.getElementById('qrScannerModal').classList.add('hidden');
         }
 
-        // Generic QR Scanner Functions
-        function openQRScannerModal(modalId, onOpen) {
-            document.getElementById(modalId).classList.remove('hidden');
-            setTimeout(onOpen, 300);
+        function startCameraScanning() {
+            startQRScannerGeneric(
+                'qrVideo', 
+                'qrCanvas', 
+                'scannerPlaceholder', 
+                'scannerOverlay',
+                'startScanBtn',
+                'stopScanBtn',
+                'scanResult',
+                'scanResultText',
+                handleQRScanResult
+            );
         }
 
-        function closeQRScannerModal(modalId) {
+        function stopCameraScanning() {
             stopQRScannerGeneric();
-            document.getElementById(modalId).classList.add('hidden');
+            // Reset UI elements
+            document.getElementById('startScanBtn').classList.remove('hidden');
+            document.getElementById('stopScanBtn').classList.add('hidden');
+            document.getElementById('qrVideo').classList.add('hidden');
+            document.getElementById('scannerOverlay').classList.add('hidden');
+            document.getElementById('scannerPlaceholder').classList.remove('hidden');
+            document.getElementById('scanResult').classList.add('hidden');
+        }
+
+        function handleQRScanResult(qrData) {
+            stopCameraScanning();
+            if (navigator.vibrate) navigator.vibrate(150);
+            document.getElementById('qrInput').value = qrData;
+            searchJobByQR();
+            setTimeout(() => closeQRScanner(), 500);
         }
 
         async function startQRScannerGeneric(videoId, canvasId, placeholderId, overlayId, startBtnId, stopBtnId, resultId, resultTextId, onResult) {
@@ -1511,7 +1522,7 @@
             
             // Haptic feedback - ให้มือถือสั่นเมื่อสแกนสำเร็จ
             if (navigator.vibrate) {
-                navigator.vibrate([150, 50, 150]); // รูปแบบการสั่นที่ชัดเจนขึ้น
+                navigator.vibrate(150); // การสั่นสั้นๆ เพียงครั้งเดียว
             }
 
             // แสดงผลลัพธ์การสแกน
@@ -1520,11 +1531,9 @@
                 document.getElementById(resultId).classList.remove('hidden');
             }
 
-            // ปิด Modal อัตโนมัติหลัง 1 วินาที และเรียก callback
-            setTimeout(() => {
-                onResult(qrData);
-                showNotification('สแกน QR Code สำเร็จ!', 'success');
-            }, 1000);
+            // เรียก callback ทันที
+            onResult(qrData);
+            showNotification('สแกน QR Code สำเร็จ!', 'success');
         }
 
         function loadReceiveJobData() {
@@ -1980,27 +1989,46 @@
         }
 
         function openAndStartIssueQRScanner() {
-            openQRScannerModal('issueQrScannerModal', () => {
-                startQRScannerGeneric(
-                    'issueQrVideo', 
-                    'issueQrCanvas', 
-                    'issueScannerPlaceholder', 
-                    'issueScannerOverlay',
-                    'issueStartScanBtn',
-                    'issueStopScanBtn',
-                    'issueScanResult',
-                    'issueScanResultText',
-                    (qrData) => {
-                        document.getElementById('issueQrInput').value = qrData;
-                        searchIssueJobByQR();
-                        closeIssueQRScanner();
-                    }
-                );
-            });
+            document.getElementById('issueQrScannerModal').classList.remove('hidden');
+            setTimeout(startIssueCameraScanning, 300); // เปิดกล้องอัตโนมัติ
         }
 
         function closeIssueQRScanner() {
-            closeQRScannerModal('issueQrScannerModal');
+            stopIssueCameraScanning();
+            document.getElementById('issueQrScannerModal').classList.add('hidden');
+        }
+
+        function startIssueCameraScanning() {
+            startQRScannerGeneric(
+                'issueQrVideo', 
+                'issueQrCanvas', 
+                'issueScannerPlaceholder', 
+                'issueScannerOverlay',
+                'issueStartScanBtn',
+                'issueStopScanBtn',
+                'issueScanResult',
+                'issueScanResultText',
+                handleIssueQRScanResult
+            );
+        }
+
+        function stopIssueCameraScanning() {
+            stopQRScannerGeneric();
+            // Reset UI elements
+            document.getElementById('issueStartScanBtn').classList.remove('hidden');
+            document.getElementById('issueStopScanBtn').classList.add('hidden');
+            document.getElementById('issueQrVideo').classList.add('hidden');
+            document.getElementById('issueScannerOverlay').classList.add('hidden');
+            document.getElementById('issueScannerPlaceholder').classList.remove('hidden');
+            document.getElementById('issueScanResult').classList.add('hidden');
+        }
+
+        function handleIssueQRScanResult(qrData) {
+            stopIssueCameraScanning();
+            if (navigator.vibrate) navigator.vibrate(150);
+            document.getElementById('issueQrInput').value = qrData;
+            searchIssueJobByQR();
+            setTimeout(() => closeIssueQRScanner(), 500);
         }
 
         function loadIssueJobData() {
@@ -2999,38 +3027,52 @@
             }
         }
 
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg text-white font-medium transform transition-all duration-300 translate-x-full`;
+        function showToast(message, type = "success") {
+            const container = document.getElementById("toast-container");
+            const bg = {
+                success: "bg-green-500", 
+                error: "bg-red-500", 
+                warning: "bg-yellow-500",
+                info: "bg-blue-500"
+            }[type] || "bg-gray-800";
             
-            if (type === 'success') {
-                notification.classList.add('bg-green-500');
-            } else if (type === 'error') {
-                notification.classList.add('bg-red-500');
-            } else {
-                notification.classList.add('bg-blue-500');
-            }
+            const icon = {
+                success: "fa-check-circle",
+                error: "fa-exclamation-triangle", 
+                warning: "fa-exclamation-circle",
+                info: "fa-info-circle"
+            }[type] || "fa-bell";
             
-            notification.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info'}-circle"></i>
-                    <span>${message}</span>
-                </div>
+            const toast = document.createElement("div");
+            toast.className = `toast ${bg} text-white px-4 py-3 rounded-xl shadow-lg transform translate-x-full transition-all duration-300 flex items-center space-x-2 min-w-64`;
+            toast.innerHTML = `
+                <i class="fas ${icon}"></i>
+                <span class="font-medium">${message}</span>
             `;
             
-            document.body.appendChild(notification);
+            container.appendChild(toast);
             
+            // Slide in animation
             setTimeout(() => {
-                notification.classList.remove('translate-x-full');
-            }, 100);
+                toast.classList.remove("translate-x-full");
+                toast.classList.add("translate-x-0");
+            }, 50);
             
+            // Auto remove after 3 seconds
             setTimeout(() => {
-                notification.classList.add('translate-x-full');
+                toast.classList.add("translate-x-full");
                 setTimeout(() => {
-                    document.body.removeChild(notification);
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
                 }, 300);
             }, 3000);
         }
+
+        // Alias for backward compatibility
+        function showNotification(message, type = 'info') {
+            showToast(message, type);
+        }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f686cb73abd32c',t:'MTc1NzkyMjU1Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f68fb036abd32c',t:'MTc1NzkyMjkyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
